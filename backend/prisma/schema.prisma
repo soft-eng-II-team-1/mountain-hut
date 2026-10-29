@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model has constraints using non-default deferring rules and requires additional setup for migrations. Visit https://pris.ly/d/constraint-deferring for more info.
+model reservation {
+  reservation_id    String              @id @db.Uuid
+  people            Int
+  slot_id           String              @db.Uuid
+  user_id           String              @db.Uuid
+  slot              slot                @relation(fields: [slot_id], references: [slot_id], onDelete: NoAction, onUpdate: NoAction)
+  user              user                @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+  reservation_table reservation_table[]
+}
+
+/// This model has constraints using non-default deferring rules and requires additional setup for migrations. Visit https://pris.ly/d/constraint-deferring for more info.
+model reservation_table {
+  id             String      @id @db.Uuid
+  reservation_id String      @db.Uuid
+  table_id       String      @db.Uuid
+  seats_reserved Int
+  reservation    reservation @relation(fields: [reservation_id], references: [reservation_id], onDelete: NoAction, onUpdate: NoAction)
+  table          table       @relation(fields: [table_id], references: [table_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([reservation_id, table_id], map: "reservation_table_reservation_id_table_id_idx")
+}
+
+model slot {
+  slot_id         String        @id @db.Uuid
+  date_time_start DateTime      @db.Timestamptz(6)
+  date_time_end   DateTime      @db.Timestamptz(6)
+  reservation     reservation[]
+  slot_table      slot_table[]
+}
+
+/// This model has constraints using non-default deferring rules and requires additional setup for migrations. Visit https://pris.ly/d/constraint-deferring for more info.
+model slot_table {
+  id       String @id @db.Uuid
+  slot_id  String @db.Uuid
+  table_id String @db.Uuid
+  slot     slot   @relation(fields: [slot_id], references: [slot_id], onDelete: NoAction, onUpdate: NoAction)
+  table    table  @relation(fields: [table_id], references: [table_id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([slot_id, table_id], map: "slot_table_slot_id_table_id_idx")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model table {
+  table_id          String              @id @db.Uuid
+  number            String              @unique
+  seats             Int
+  reservation_table reservation_table[]
+  slot_table        slot_table[]
+}
+
+model user {
+  user_id     String        @id @db.Uuid
+  role        user_role
+  name        String
+  surname     String
+  phone       String?
+  email       String        @unique
+  hash        String
+  salt        String
+  reservation reservation[]
+}
+
+enum user_role {
+  hiker
+  employee
+  warden
+}
