@@ -7,8 +7,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "cross-env NODE_OPTIONS=--experimental-vm-modules jest --runInBand --detectOpenHandles",
-    "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/unit",
-    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest tests/integration --runInBand --detectOpenHandles"
+    "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src/tests/unit",
+    "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src/tests/integration --runInBand --detectOpenHandles"
   },
   "keywords": [],
   "author": "",

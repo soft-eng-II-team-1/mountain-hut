@@ -1,5 +1,5 @@
 import request from 'supertest';
-import app from '../app.js';
+import app from '../../app.js';
 
 describe('GET /health', () => {
   it('dovrebbe restituire status 200, il tipo JSON e i dettagli sullo stato dell app', async () => {
