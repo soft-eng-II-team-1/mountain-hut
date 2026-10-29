@@ -1,23 +1,25 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import { initMailer, sendEmail } from './config/mailer';
+import morgan from 'morgan';
+import { initMailer, sendEmail } from './config/mailer.js';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+app.use(morgan('dev'));
 
 // Health check endpoint
-app.get('/api/health', (_req: Request, res: Response) => {
+app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Mountain Hut API is running' });
 });
 
 // Test email endpoint (useful to verify your email task works!)
-app.post('/api/test-email', async (req: Request, res: Response) => {
+app.post('/api/test/email', async (req, res) => {
   try {
     const { to = 'hiker@example.com' } = req.body;
     await sendEmail(
@@ -33,8 +35,8 @@ app.post('/api/test-email', async (req: Request, res: Response) => {
 });
 
 app.listen(PORT, async () => {
-  console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   await initMailer();
+  console.log(`Backend server running on http://localhost:${PORT}`);
 });
 
 export default app;

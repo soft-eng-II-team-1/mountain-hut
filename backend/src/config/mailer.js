@@ -1,10 +1,9 @@
 import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-let transporter: Transporter;
+let transporter;
 
 export const initMailer = async () => {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
@@ -16,7 +15,7 @@ export const initMailer = async () => {
         pass: process.env.SMTP_PASS,
       },
     });
-    console.log('✉️  Email system configured with .env credentials.');
+    console.log('Email system configured with .env credentials.');
   } else {
     // Automatically generate a working test account for local development
     const testAccount = await nodemailer.createTestAccount();
@@ -29,11 +28,11 @@ export const initMailer = async () => {
         pass: testAccount.pass,
       },
     });
-    console.log(`✉️  Email test system ready (Ethereal User: ${testAccount.user})`);
+    console.log(`Email test system ready (Ethereal User: ${testAccount.user})`);
   }
 };
 
-export const sendEmail = async (to: string, subject: string, text: string, html?: string) => {
+export const sendEmail = async (to, subject, text, html) => {
   if (!transporter) {
     await initMailer();
   }
@@ -46,10 +45,10 @@ export const sendEmail = async (to: string, subject: string, text: string, html?
     html: html || text,
   });
 
-  console.log(`📨 Message sent: ${info.messageId}`);
+  console.log(`Message sent: ${info.messageId}`);
   const previewUrl = nodemailer.getTestMessageUrl(info);
   if (previewUrl) {
-    console.log(`🔗 Preview Email URL: ${previewUrl}`);
+    console.log(`Preview Email URL: ${previewUrl}`);
   }
   return info;
 };
