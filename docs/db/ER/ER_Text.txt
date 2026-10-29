@@ -1,0 +1,65 @@
+Table reservation {
+  reservation_id uuid [primary key]
+  people integer [not null, check: `people > 0`]
+  slot_id uuid [not null]
+  user_id uuid [not null]
+}
+
+Table table {
+  table_id uuid [primary key]
+  number string [not null, unique]
+  seats integer [not null, check: `seats > 0`]
+}
+
+Table slot {
+  slot_id uuid [primary key]
+  date_time_start datetime [not null]
+  date_time_end datetime [not null]
+}
+
+Table user {
+  user_id uuid [primary key]
+  role user_role [not null]
+  name string [not null]
+  surname string [not null]
+  phone string
+  email string [not null, unique]
+  hash string [not null]
+  salt string [not null]
+}
+
+Table reservation_table {
+  id uuid [primary key]
+  reservation_id uuid [not null]
+  table_id uuid [not null]
+  seats_reserved integer [not null]
+
+  indexes {
+    (reservation_id, table_id) [unique]
+  }
+}
+
+Table slot_table {
+  id uuid [primary key]
+  slot_id uuid [not null]
+  table_id uuid [not null]
+
+  indexes {
+    (slot_id, table_id) [unique]
+  }
+}
+
+Enum user_role {
+  hiker
+  employee
+  warden
+}
+
+Ref: reservation.slot_id > slot.slot_id
+Ref: reservation.user_id > user.user_id
+
+Ref: reservation_table.reservation_id > reservation.reservation_id
+Ref: reservation_table.table_id > table.table_id
+
+Ref: slot_table.slot_id > slot.slot_id
+Ref: slot_table.table_id > table.table_id
