@@ -28,7 +28,13 @@ npx prisma generate --config prisma7.config.ts # Generate Prisma Client
 npx prisma db seed --config prisma7.config.ts # Seed database
 ```
 
-#### 1.3 Run Backend
+#### 1.3 Prisma Studio (GUI for Prisma)
+```bash
+cd backend
+npx prisma studio
+```
+
+#### 1.4 Run Backend
 ```bash
 cd backend
 npm run dev
