@@ -2,14 +2,67 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
+import passport from 'passport';
+import LocalStrategy from 'passport-local';
+import session from 'express-session';
+
+import { sendEmail } from './config/mailer.js';
+
+import UserDao from './dao/UserDAO.js';
+const userDao = new UserDao();
+
+import authRoutes from './routes/auth.js';
 
 dotenv.config();
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:5173',
+  credentials: true
+}));
+
 app.use(express.json());
+
 app.use(morgan('dev'));
+
+passport.use(new LocalStrategy({ usernameField: 'email' }, async function verify(email, password, callback) {
+  try {
+    const user = await userDao.getUser(email, password);
+
+    if (!user) {
+      return callback(null, false, { message: "Email or password incorrect" });
+    }
+    else {
+      return callback(null, user);
+    }
+  } catch (error) {
+    return callback(error);
+  }
+}));
+
+passport.serializeUser(function (user, callback) {
+  callback(null, user);
+});
+
+passport.deserializeUser(function (user, callback) {
+  callback(null, user);
+});
+
+app.use(session({
+  secret: process.env.SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: false,
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 // = 86.400.000 millisecondi (esattamente 1 giorno)
+  }
+}));
+
+app.use(passport.authenticate('session'));
+
+app.use('/api/auth', authRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
