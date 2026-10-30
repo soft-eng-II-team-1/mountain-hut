@@ -1,6 +1,8 @@
-import router from 'express';
+import Router from 'express';
 import TableDAO from '../dao/TableDAO';
 import {isStaff} from '../middleware/auth';
+
+const router = Router();
 
 router.post('/', isStaff, async (req, res) => {
   try {
