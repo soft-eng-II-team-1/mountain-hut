@@ -26,8 +26,7 @@
     "nodemailer": "^10.2.1",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
-    "pg": "^8.23.1",
-    "tsx": "^4.23.15"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
@@ -36,6 +35,7 @@
     "jest": "^30.5.2",
     "prisma": "^7.10.1",
     "supertest": "^7.3.1",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }
