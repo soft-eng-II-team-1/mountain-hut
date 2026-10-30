@@ -22,9 +22,10 @@ npm install
 
 ```bash
 cd backend
-docker compose up -d
-npx prisma migrate dev --config prisma7.config.ts
-npx prisma generate --config prisma7.config.ts
+docker compose up -d # Run docker compose
+npx prisma migrate dev --config prisma7.config.ts # Run migrations
+npx prisma generate --config prisma7.config.ts # Generate Prisma Client
+npx prisma db seed --config prisma7.config.ts # Seed database
 ```
 
 #### 1.3 Run Backend
