@@ -110,7 +110,7 @@
             }
           },
           {
-            "name": "seats",
+            "name": "partySize",
             "in": "query",
             "required": true,
             "schema": {
@@ -163,6 +163,53 @@
           }
         }
       }
+    },
+    "/api/slots/{slot_id}/reservations": {
+      "post": {
+        "summary": "Create a new reservation for a slot",
+        "parameters": [
+          {
+            "name": "slot_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservationInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Reservation created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Reservation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid input or insufficient availability"
+          },
+          "404": {
+            "description": "Slot not found"
+          },
+          "409": {
+            "description": "Conflict with existing reservations"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -181,6 +228,54 @@
           "seats": {
             "type": "integer",
             "example": 4
+          }
+        }
+      },
+      "ReservationInput": {
+        "type": "object",
+        "required": [
+          "people"
+        ],
+        "properties": {
+          "people": {
+            "type": "integer",
+            "example": 4
+          }
+        }
+      },
+      "Reservation": {
+        "type": "object",
+        "properties": {
+          "reservation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "people": {
+            "type": "integer",
+            "example": 4
+          },
+          "slot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "table_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "seats_reserved": {
+                  "type": "integer"
+                }
+              }
+            }
           }
         }
       },

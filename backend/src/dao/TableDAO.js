@@ -1,5 +1,5 @@
-const crypto = require('crypto');
-const prisma = require('../../prisma.client'); 
+import {crypto} from 'crypto';
+import { prisma } from '../../prisma.client.ts';
 
 class TableDAO {
   static async createTable(tableData) {
@@ -34,4 +34,4 @@ class TableDAO {
   }
 }
 
-module.exports = TableDAO;
+export default TableDAO;

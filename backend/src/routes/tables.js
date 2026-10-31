@@ -1,4 +1,4 @@
-import Router from 'express';
+import {Router} from 'express';
 import TableDAO from '../dao/TableDAO';
 import {isStaff} from '../middleware/auth';
 
@@ -58,4 +58,4 @@ router.delete('/:tableId', isStaff, async (req, res) => {
   }
 });
 
-module.exports = router;
+export default router;

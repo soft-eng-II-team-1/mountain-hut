@@ -5,6 +5,8 @@ import morgan from 'morgan';
 import passport from 'passport';
 import LocalStrategy from 'passport-local';
 import session from 'express-session';
+import tableRoutes from './routes/tables.js';
+import reservationRoutes from './routes/reservations.js';
 
 import { sendEmail } from './config/mailer.js';
 
@@ -63,6 +65,12 @@ app.use(session({
 app.use(passport.authenticate('session'));
 
 app.use('/api/auth', authRoutes);
+
+// Mounts router.post('/'), put('/:tableId'), delete('/:tableId') at /api/tables
+app.use('/api/tables', tableRoutes);
+
+// Mounts router.get('/slots/:slotId/availability') and post('/slots/:slotId/reservations') at /api/slots/...
+app.use('/api', reservationRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
