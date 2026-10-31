@@ -1,10 +1,15 @@
-import prisma from '../prismaClient.js';
+import { prisma } from '../../prisma.client.ts';
 import crypto from 'crypto';
+import { assignTables } from '../services/tableAssignment.js';
+
+// How many times a booking is retried when it collides with a concurrent one on the same slot
+const MAX_BOOKING_ATTEMPTS = 3;
 
 class ReservationDAO {
-    static async checkAvailability(slotId, partySize) {
+    // `db` can be a transaction client, so the check sees the same snapshot used to save
+    static async checkAvailability(slotId, partySize, db = prisma) {
         // 1. Fetch all tables assigned to this specific slot
-        const slotTables = await prisma.slot_table.findMany({
+        const slotTables = await db.slot_table.findMany({
             where: { slot_id: slotId },
             include: { table: true }
         });
@@ -14,7 +19,7 @@ class ReservationDAO {
         }
 
         // 2. Fetch all existing reservations for this slot to see what is taken
-        const existingReservations = await prisma.reservation_table.findMany({
+        const existingReservations = await db.reservation_table.findMany({
             where: { reservation: { slot_id: slotId } }
         });
 
@@ -39,13 +44,13 @@ class ReservationDAO {
             };
         }).filter(table => table.remainingSeats > 0);
 
-        // 4. Enforce business rule: check if total capacity meets the party size
+        // 4. Enforce business rule: the party must fit in the free seats of the slot.
+        //    Since a party can be split over any number of tables, this is also
+        //    enough to guarantee that assignTables() finds an assignment.
         if (totalAvailableSeats < partySize) {
             return { available: false, totalAvailableSeats, availableTables: [] };
         }
 
-        // Note for MH-43: The story requires keeping parties together. 
-        // You will use this 'availableTables' array later to calculate the optimal split.
         return {
             available: true,
             totalAvailableSeats,
@@ -54,8 +59,30 @@ class ReservationDAO {
     }
 
     static async saveReservation(userId, slotId, people) {
+        // Checks and inserts run in a SERIALIZABLE transaction: two hikers booking the
+        // same slot at the same time cannot both read the same free seats (overbooking),
+        // and the same hiker cannot create two reservations for the slot.
+        for (let attempt = 1; ; attempt++) {
+            try {
+                return await prisma.$transaction(
+                    tx => this.createReservation(tx, userId, slotId, people),
+                    { isolationLevel: 'Serializable' }
+                );
+            } catch (error) {
+                if (error.code !== 'P2034') {
+                    throw error;
+                }
+                if (attempt >= MAX_BOOKING_ATTEMPTS) {
+                    throw new Error("The slot is being booked by other hikers, please try again");
+                }
+            }
+        }
+    }
+
+    // Must be called inside a transaction (see saveReservation)
+    static async createReservation(tx, userId, slotId, people) {
         // 1. Fetch slot to check the 2-hour cutoff rule
-        const slot = await prisma.slot.findUnique({
+        const slot = await tx.slot.findUnique({
             where: { slot_id: slotId }
         });
         if (!slot) {
@@ -69,7 +96,7 @@ class ReservationDAO {
         }
 
         // 2. Check the "only one booking per time slot" rule for this hiker
-        const existingBooking = await prisma.reservation.findFirst({
+        const existingBooking = await tx.reservation.findFirst({
             where: { slot_id: slotId, user_id: userId }
         });
         if (existingBooking) {
@@ -77,85 +104,43 @@ class ReservationDAO {
         }
 
         // 3. Check total seat availability
-        const availability = await this.checkAvailability(slotId, people);
+        const availability = await this.checkAvailability(slotId, people, tx);
         if (!availability.available) {
             throw new Error("Insufficient seats available for this party size");
         }
 
-        // 4. Table Assignment Algorithm
-        const tables = availability.availableTables; // [{ table_id, number, remainingSeats }]
-        const tableAssignments = [];
-
-        // Case A: Try to fit the whole party at a single table (smallest fit first)
-        const singleTableFit = tables
-            .filter(t => t.remainingSeats >= people)
-            .sort((a, b) => a.remainingSeats - b.remainingSeats)[0];
-
-        if (singleTableFit) {
-            tableAssignments.push({
-                table_id: singleTableFit.table_id,
-                seats_reserved: people
-            });
-        } else {
-            // Case B: Split across as few tables as possible
-            // Sort largest to smallest to minimize the number of tables used
-            const sortedDesc = [...tables].sort((a, b) => b.remainingSeats - a.remainingSeats);
-            let remainingPeople = people;
-
-            for (let i = 0; i < sortedDesc.length && remainingPeople > 0; i++) {
-                // Before taking a huge table for the last few people, check if a smaller table fits the exact remainder
-                const restOfTables = sortedDesc.slice(i);
-                const smallestFitForRemainder = restOfTables
-                    .filter(t => t.remainingSeats >= remainingPeople)
-                    .sort((a, b) => a.remainingSeats - b.remainingSeats)[0];
-
-                if (smallestFitForRemainder) {
-                    tableAssignments.push({
-                        table_id: smallestFitForRemainder.table_id,
-                        seats_reserved: remainingPeople
-                    });
-                    remainingPeople = 0;
-                } else {
-                    // Fill the largest available table completely and continue
-                    const currentTable = sortedDesc[i];
-                    tableAssignments.push({
-                        table_id: currentTable.table_id,
-                        seats_reserved: currentTable.remainingSeats
-                    });
-                    remainingPeople -= currentTable.remainingSeats;
-                }
-            }
+        // 4. Table assignment: one table if possible, otherwise the fewest tables
+        //    with the smallest set of free seats (see services/tableAssignment.js)
+        const tableAssignments = assignTables(availability.availableTables, people);
+        if (!tableAssignments) {
+            throw new Error("Insufficient seats available for this party size");
         }
 
-        // 5. Save everything atomically in a transaction
-        return await prisma.$transaction(async (tx) => {
-            const newReservationId = crypto.randomUUID();
+        // 5. Save the reservation and its tables
+        const newReservationId = crypto.randomUUID();
 
-            const newReservation = await tx.reservation.create({
-                data: {
-                    reservation_id: newReservationId,
-                    people: people,
-                    slot_id: slotId,
-                    user_id: userId
-                }
-            });
+        const newReservation = await tx.reservation.create({
+            data: {
+                reservation_id: newReservationId,
+                people: people,
+                slot_id: slotId,
+                user_id: userId
+            }
+        });
 
-            const reservationTableRows = tableAssignments.map(assignment => ({
+        await tx.reservation_table.createMany({
+            data: tableAssignments.map(assignment => ({
                 id: crypto.randomUUID(),
                 reservation_id: newReservationId,
                 table_id: assignment.table_id,
                 seats_reserved: assignment.seats_reserved
-            }));
-
-            await tx.reservation_table.createMany({
-                data: reservationTableRows
-            });
-
-            return {
-                ...newReservation,
-                tables: tableAssignments
-            };
+            }))
         });
+
+        return {
+            ...newReservation,
+            tables: tableAssignments
+        };
     }
 }
 

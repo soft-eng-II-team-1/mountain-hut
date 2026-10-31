@@ -1,13 +1,19 @@
 import { Router } from 'express'
 import ReservationDAO from '../dao/ReservationDAO.js';
-import { isLoggedIn } from '../middleware/auth.js';
+import { isLoggedIn, isHiker } from '../middlewares/auth.js';
 
 const router = Router();
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
     try {
         const { slotId } = req.params;
         const partySize = Number(req.query.partySize);
+
+        if (!UUID_REGEX.test(slotId)) {
+            return res.status(400).json({ error: "Invalid slot_id" });
+        }
 
         if (!Number.isInteger(partySize) || partySize <= 0) {
             return res.status(400).json({ error: "A valid positive integer partySize query parameter is required" });
@@ -28,10 +34,15 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
     }
 });
 
-router.post('/slots/:slotId/reservations', isLoggedIn, async (req, res) => {
+// Only hikers can book a table (requirement of MH-01)
+router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
     try {
         const { slotId } = req.params;
         const people = Number(req.body.people);
+
+        if (!UUID_REGEX.test(slotId)) {
+            return res.status(400).json({ error: "Invalid slot_id" });
+        }
 
         if (!Number.isInteger(people) || people <= 0) {
             return res.status(400).json({ error: "Invalid input: 'people' must be a positive integer" });
@@ -43,7 +54,10 @@ router.post('/slots/:slotId/reservations', isLoggedIn, async (req, res) => {
         if (error.message === "Slot not found") {
             return res.status(404).json({ error: error.message });
         }
-        if (error.message === "You already have a reservation for this time slot") {
+        if (
+            error.message === "You already have a reservation for this time slot" ||
+            error.message === "The slot is being booked by other hikers, please try again"
+        ) {
             return res.status(409).json({ error: error.message });
         }
         if (

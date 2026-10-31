@@ -202,11 +202,17 @@
           "400": {
             "description": "Invalid input or insufficient availability"
           },
+          "401": {
+            "description": "User is not logged in"
+          },
+          "403": {
+            "description": "Only hikers can book a table"
+          },
           "404": {
             "description": "Slot not found"
           },
           "409": {
-            "description": "Conflict with existing reservations"
+            "description": "The hiker already has a reservation for this slot, or the slot was being booked concurrently (retry)"
           }
         }
       }
@@ -270,6 +276,10 @@
                 "table_id": {
                   "type": "string",
                   "format": "uuid"
+                },
+                "number": {
+                  "type": "string",
+                  "example": "T1"
                 },
                 "seats_reserved": {
                   "type": "integer"

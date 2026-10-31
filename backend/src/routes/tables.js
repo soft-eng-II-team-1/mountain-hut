@@ -1,6 +1,6 @@
 import {Router} from 'express';
-import TableDAO from '../dao/TableDAO';
-import {isStaff} from '../middleware/auth';
+import TableDAO from '../dao/TableDAO.js';
+import {isStaff} from '../middlewares/auth.js';
 
 const router = Router();
 
