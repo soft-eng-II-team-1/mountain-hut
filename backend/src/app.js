@@ -10,6 +10,7 @@ import session from 'express-session';
 import { sendEmail } from './config/mailer.js';
 
 import wardenRoutes from './routes/warden.js';
+import slotRoutes from './routes/slots.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
@@ -88,12 +89,16 @@ app.post('/api/test/email', async (req, res) => {
   }
 });
 
+app.use('/api/warden', wardenRoutes);
+
+app.use('/api/slots', slotRoutes);
+
 //error handler 
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.use('/api/warden', wardenRoutes);
+
 
 export default app;
