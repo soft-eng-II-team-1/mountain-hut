@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -7,6 +8,8 @@ import LocalStrategy from 'passport-local';
 import session from 'express-session';
 
 import { sendEmail } from './config/mailer.js';
+
+import wardenRoutes from './routes/warden.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
@@ -84,5 +87,13 @@ app.post('/api/test/email', async (req, res) => {
     res.status(500).json({ error: 'Failed to send test email' });
   }
 });
+
+//error handler 
+app.use((err, req, res, next) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+app.use('/api/warden', wardenRoutes);
 
 export default app;
