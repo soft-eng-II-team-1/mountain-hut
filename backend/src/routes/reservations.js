@@ -1,5 +1,8 @@
 import { Router } from 'express'
+import {body, param, query } from 'express-validator';
+
 import ReservationDAO from '../dao/ReservationDAO.js';
+import validateRequest from '../middlewares/validateParams.js';
 import { isLoggedIn, isHiker } from '../middlewares/auth.js';
 
 const router = Router();
@@ -12,11 +15,11 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
         const partySize = Number(req.query.partySize);
 
         if (!UUID_REGEX.test(slotId)) {
-            return res.status(400).json({ error: "Invalid slot_id" });
+                        return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(partySize) || partySize <= 0) {
-            return res.status(400).json({ error: "A valid positive integer partySize query parameter is required" });
+            return res.status(422).json({ errors: [{ field: 'partySize', message: 'partySize must be a positive integer' }] });
         }
 
         const availability = await ReservationDAO.checkAvailability(slotId, partySize);
@@ -41,11 +44,11 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
         const people = Number(req.body.people);
 
         if (!UUID_REGEX.test(slotId)) {
-            return res.status(400).json({ error: "Invalid slot_id" });
+                return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(people) || people <= 0) {
-            return res.status(400).json({ error: "Invalid input: 'people' must be a positive integer" });
+            return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
         }
 
         const newReservation = await ReservationDAO.saveReservation(req.user.user_id, slotId, people);
