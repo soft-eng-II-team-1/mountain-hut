@@ -34,4 +34,39 @@ export default function userDAO() {
             }
         });
     }
+
+    //create user function
+    //default role is hiker, but can be set to employee if needed
+    //returns null if user already exists, otherwise returns the created user
+    this.createUser = async({name, surname, email, phone, password, role = 'hiker'}) => {
+        const salt = crypto.randomBytes(16).toString('hex');
+
+        const hash = await new Promise((resolve, reject) => {
+            crypto.scrypt(password, salt, 64, (err, derivedKey) => {
+                if (err) reject(err);
+                resolve(derivedKey.toString('hex'));
+            });
+        });
+
+        try {
+            const user = await prisma.user.create({
+                data: {
+                    user_id: crypto.randomUUID(),
+                    role,
+                    name,
+                    surname,
+                    email,
+                    phone: phone || null,
+                    hash,
+                    salt
+                }
+            });
+            return { user_id: user.user_id, email: user.email, role: user.role };
+        } catch (error) {
+            if(error.code === 'P2002' && (!error.meta?.target || String(error.meta.target).includes('email'))) {
+                return null;
+            }
+            throw error;
+        }
+    }
 }

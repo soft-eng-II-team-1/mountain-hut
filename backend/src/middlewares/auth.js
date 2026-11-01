@@ -30,4 +30,13 @@ const isStaff = (req, res, next) => {
     }
 };
 
-export { isLoggedIn, isHiker, isEmployee, isStaff };
+
+const isWarden = (req, res, next) => {
+    if (req.isAuthenticated() && req.user.role === 'warden') {
+        return next();
+    } else {
+        return res.status(403).json({ message: 'Forbidden (not a warden)' });
+    }
+};
+
+export { isLoggedIn, isHiker, isEmployee, isWarden, isStaff };

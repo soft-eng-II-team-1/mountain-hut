@@ -10,6 +10,13 @@
     "test:unit": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src/tests/unit",
     "test:integration": "cross-env NODE_OPTIONS=--experimental-vm-modules jest src/tests/integration --runInBand --detectOpenHandles"
   },
+  "jest": {
+    "extensionsToTreatAsEsm": [".ts"],
+    "transform": {
+      "\\.[jt]s$": ["babel-jest", { "presets": ["@babel/preset-typescript"] }]
+    }
+  },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -29,6 +36,7 @@
     "pg": "^8.23.1"
   },
   "devDependencies": {
+    "@babel/preset-typescript": "^7.29.7",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "cross-env": "^10.1.0",
