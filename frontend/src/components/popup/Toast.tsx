@@ -44,10 +44,9 @@ export default function Toast({toast}: {toast: ToastItem}) {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       onAnimationEnd={handleCardAnimationEnd}
-      className={`pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-xl border-l-4 bg-white py-4 pr-10 pl-4 text-[#23404d] shadow-[4px_6px_14px_rgba(0,0,0,0.18)] ${
+      className={`pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-xl bg-white py-4 pr-10 pl-4 text-[#23404d] shadow-[4px_6px_14px_rgba(0,0,0,0.18)] ${
         leaving ? "animate-toast-out" : "animate-toast-in"
       }`}
-      style={{borderLeftColor: color}}
     >
       <span
         className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white"
