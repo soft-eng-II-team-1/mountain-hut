@@ -8,8 +8,8 @@ export default function MainLayout() {
       <Header />
       <main className="flex-1">
         <Outlet />
-        <Footer />
       </main>
+      <Footer />
     </div>
   );
 }
