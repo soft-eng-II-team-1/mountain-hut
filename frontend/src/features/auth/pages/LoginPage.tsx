@@ -4,16 +4,17 @@ import FormCard from "../components/form/FormCard";
 import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
 import InfoNote from "../components/form/InfoNote";
-import {login} from "../../../api/auth";
+import {useAuthStore} from "../../../store";
+import {toast} from "../../../components/popup";
 
 type Errors = Partial<Record<"email" | "password", string>>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Errors>({});
-  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const validate = (): Errors => {
@@ -28,15 +29,15 @@ export default function LoginPage() {
     event.preventDefault();
     const e = validate();
     setErrors(e);
-    setServerError("");
     if (Object.keys(e).length) return;
 
     setLoading(true);
     try {
       await login(email.trim(), password);
+      toast.success("You are now logged in.", {title: "Welcome back!"});
       navigate("/");
     } catch (err) {
-      setServerError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -57,7 +58,6 @@ export default function LoginPage() {
           </>
         }
       >
-        {serverError && <InfoNote variant="error">{serverError}</InfoNote>}
         <TextField
           label="Email Address"
           name="email"

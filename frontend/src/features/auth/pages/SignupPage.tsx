@@ -4,7 +4,8 @@ import FormCard from "../components/form/FormCard";
 import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
 import InfoNote from "../components/form/InfoNote";
-import {signup} from "../../../api/auth";
+import {useAuthStore} from "../../../store";
+import {toast} from "../../../components/popup";
 
 type Fields = {
   name: string;
@@ -46,9 +47,9 @@ function validate(f: Fields): Errors {
 
 export default function SignupPage() {
   const navigate = useNavigate();
+  const signup = useAuthStore((s) => s.signup);
   const [form, setForm] = useState<Fields>(emptyForm);
   const [errors, setErrors] = useState<Errors>({});
-  const [serverError, setServerError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e: ChangeEvent<HTMLInputElement>) =>
@@ -58,7 +59,6 @@ export default function SignupPage() {
     event.preventDefault();
     const e = validate(form);
     setErrors(e);
-    setServerError("");
     if (Object.keys(e).length) return;
 
     setLoading(true);
@@ -70,9 +70,10 @@ export default function SignupPage() {
         phone: form.phone.trim() || undefined,
         password: form.password,
       });
+      toast.success("Your account has been created.", {title: "Welcome!"});
       navigate("/");
     } catch (err) {
-      setServerError((err as Error).message);
+      toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -93,7 +94,6 @@ export default function SignupPage() {
           </>
         }
       >
-        {serverError && <InfoNote variant="error">{serverError}</InfoNote>}
         <div className="grid gap-10 sm:grid-cols-2 sm:gap-6">
           <TextField
             label="Name"
