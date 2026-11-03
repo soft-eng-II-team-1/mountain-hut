@@ -1,5 +1,17 @@
+import HeroSection from "../components/HeroSection";
+import AboutSection from "../components/AboutSection";
+import StructureSection from "../components/StructureSection";
+import TeamSection from "../components/TeamSection";
+import ServicesSection from "../components/ServicesSection";
+
 export default function HomePage() {
   return (
-    <section className="mx-auto flex max-w-4xl flex-col items-center gap-6 px-4 py-28 text-center text-[#23404d]"></section>
+    <>
+      <HeroSection />
+      <AboutSection />
+      <StructureSection />
+      <TeamSection />
+      <ServicesSection />
+    </>
   );
 }
