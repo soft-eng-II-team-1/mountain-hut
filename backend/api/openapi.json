@@ -168,6 +168,30 @@
       }
     },
     "/api/tables": {
+      "get": {
+        "summary": "List all the tables",
+        "responses": {
+          "200": {
+            "description": "List of tables ordered by number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Table"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      },
       "post": {
         "summary": "Create a new table",
         "requestBody": {
@@ -199,6 +223,9 @@
           },
           "409": {
             "description": "Table number already exists"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }
@@ -246,6 +273,12 @@
           },
           "404": {
             "description": "Table not found"
+          },
+          "409": {
+            "description": "Table number already exists"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       },
@@ -266,6 +299,9 @@
           },
           "404": {
             "description": "Table not found"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
           }
         }
       }

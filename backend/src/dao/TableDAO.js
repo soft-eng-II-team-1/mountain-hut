@@ -2,6 +2,10 @@ import crypto from 'crypto';
 import { prisma } from '../../prisma.client.ts';
 
 class TableDAO {
+  static async getTables() {
+    return await prisma.table.findMany({ orderBy: { number: 'asc' } });
+  }
+
   static async createTable(tableData) {
     return await prisma.table.create({
       data: {

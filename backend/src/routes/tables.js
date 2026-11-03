@@ -1,15 +1,31 @@
 import {Router} from 'express';
+import {body, param} from 'express-validator';
 import TableDAO from '../dao/TableDAO.js';
+import validateRequest from '../middlewares/validateParams.js';
 import {isStaff} from '../middlewares/auth.js';
 
 const router = Router();
 
-router.post('/', isStaff, async (req, res) => {
+// Validation rules: if one fails, validateRequest responds 422 before reaching the route
+const tableIdParam = param('tableId').isUUID().withMessage('tableId must be a valid UUID');
+
+const tableBodyRules = [
+  body('number').isString().notEmpty().withMessage('number must be a non-empty string'),
+  body('seats').custom((value) => Number.isInteger(value) && value > 0).withMessage('seats must be a positive integer'),
+];
+
+router.get('/', isStaff, async (req, res) => {
+  try {
+    const tables = await TableDAO.getTables();
+    res.status(200).json(tables);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/', isStaff, tableBodyRules, validateRequest, async (req, res) => {
   try {
     const { number, seats } = req.body;
-    if (!number || typeof number !== 'string' || !seats || typeof seats !== 'number') {
-        return res.status(400).json({ error: "Invalid input: requires string 'number' and integer 'seats'" });
-    }
     const newTable = await TableDAO.createTable({ number, seats });
     res.status(201).json(newTable);
   } catch (error) {
@@ -20,14 +36,10 @@ router.post('/', isStaff, async (req, res) => {
   }
 });
 
-router.put('/:tableId', isStaff, async (req, res) => {
+router.put('/:tableId', isStaff, tableIdParam, tableBodyRules, validateRequest, async (req, res) => {
   try {
     const tableId = req.params.tableId;
     const { number, seats } = req.body;
-
-    if (!number || typeof number !== 'string' || !seats || typeof seats !== 'number') {
-        return res.status(400).json({ error: "Invalid input: requires string 'number' and integer 'seats'" });
-    }
 
     const updatedTable = await TableDAO.updateTable(tableId, { number, seats });
     res.status(200).json(updatedTable);
@@ -42,7 +54,7 @@ router.put('/:tableId', isStaff, async (req, res) => {
   }
 });
 
-router.delete('/:tableId', isStaff, async (req, res) => {
+router.delete('/:tableId', isStaff, tableIdParam, validateRequest, async (req, res) => {
   try {
     const tableId = req.params.tableId;
     await TableDAO.deleteTable(tableId);
