@@ -1,16 +1,18 @@
 import {useState, type FormEvent} from "react";
-import {Link, useNavigate} from "react-router";
+import {Link, useLocation, useNavigate} from "react-router";
 import FormCard from "../components/form/FormCard";
 import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
 import InfoNote from "../components/form/InfoNote";
 import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
+import {STAFF_ROLES} from "../../../types";
 
 type Errors = Partial<Record<"email" | "password", string>>;
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const login = useAuthStore((s) => s.login);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,9 +35,13 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      await login(email.trim(), password);
+      const user = await login(email.trim(), password);
       toast.success("You are now logged in.", {title: "Welcome back!"});
-      navigate("/");
+      // back to the protected page that sent us here, else staff land on the dashboard
+      const from = (location.state as {from?: string} | null)?.from;
+      navigate(from ?? (STAFF_ROLES.includes(user.role) ? "/admin" : "/"), {
+        replace: true,
+      });
     } catch (err) {
       toast.error((err as Error).message);
     } finally {

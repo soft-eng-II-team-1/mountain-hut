@@ -1,1 +1,3 @@
-export type * from "./auth";
+export * from "./auth";
+export * from "./table";
+export * from "./slot";

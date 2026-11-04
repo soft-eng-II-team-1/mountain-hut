@@ -2,15 +2,14 @@ import {Link, useLocation, useNavigate} from "react-router";
 import Logo from "./Logo";
 import {useAuthStore} from "../../store";
 import {toast} from "../popup";
+import {STAFF_ROLES} from "../../types";
 
-// Section anchors on the home page. "Book" has no page yet, so it points at
-// the services/prices table for now.
 const navLinks = [
-  {hash: "about", label: "About"},
-  {hash: "structure", label: "The structure"},
-  {hash: "team", label: "Our team"},
-  {hash: "services", label: "Services"},
-  {hash: "services", label: "Book"},
+  // {path: "about", label: "About"},
+  // {path: "structure", label: "The structure"},
+  // {path: "team", label: "Our team"},
+  // {path: "services", label: "Services"},
+  {path: "services", label: "Book"},
 ];
 
 export default function Header() {
@@ -44,7 +43,7 @@ export default function Header() {
             {navLinks.map((l) => (
               <Link
                 key={l.label}
-                to={{pathname: "/", hash: l.hash}}
+                to={l.path}
                 className="text-sm font-medium text-white transition hover:text-white/70"
               >
                 {l.label}
@@ -55,6 +54,14 @@ export default function Header() {
           {!loading &&
             (user ? (
               <div className="flex items-center gap-4">
+                {STAFF_ROLES.includes(user.role) && (
+                  <Link
+                    to="/admin"
+                    className="text-sm font-medium text-white transition hover:text-white/70"
+                  >
+                    Dashboard
+                  </Link>
+                )}
                 <span className="hidden text-sm text-white sm:inline">
                   {user.email}
                 </span>
