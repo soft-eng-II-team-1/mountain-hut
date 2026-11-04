@@ -10,6 +10,9 @@ export const getSlots = (from: Date, to: Date) => {
   return request<Slot[]>(`/api/slots?${params}`);
 };
 
+export const createSlot = (data: SlotInput) =>
+  request<Slot>("/api/slots", "POST", data);
+
 export const updateSlot = (slotId: string, data: SlotInput) =>
   request<Slot>(`/api/slots/${slotId}`, "PUT", data);
 

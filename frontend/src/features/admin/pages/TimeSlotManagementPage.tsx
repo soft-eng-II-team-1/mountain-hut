@@ -1,5 +1,6 @@
 import {useEffect, useMemo, useState} from "react";
 import PageHeader from "../components/PageHeader";
+import NewSlotModal from "../components/NewSlotModal";
 import {getAllTables, getSlots, updateSlot} from "../../../api/slots";
 import {toast} from "../../../components/popup";
 import type {Slot, Table} from "../../../types";
@@ -36,7 +37,10 @@ const byNumber = (a: Table, b: Table) =>
 const sameIds = (a: Set<string>, b: Set<string>) =>
   a.size === b.size && [...a].every((id) => b.has(id));
 
-// MH-02: pick which tables (and so how many seats) each time slot has
+const byStart = (a: Slot, b: Slot) =>
+  a.date_time_start.localeCompare(b.date_time_start);
+
+// MH-02: create time slots and pick which tables (and so how many seats) each has
 export default function TimeSlotManagementPage() {
   const [date, setDate] = useState(() => toInputDate(new Date()));
   const [tables, setTables] = useState<Table[]>([]);
@@ -50,6 +54,7 @@ export default function TimeSlotManagementPage() {
     null,
   );
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   const loadingSlots = loaded?.date !== date;
   const slots = loadingSlots ? [] : loaded.slots;
@@ -95,6 +100,21 @@ export default function TimeSlotManagementPage() {
     if (next.has(tableId)) next.delete(tableId);
     else next.add(tableId);
     setEdits({slotId: slot.slot_id, ids: next});
+  };
+
+  // show the new slot: same day -> add it to the list, other day -> load that day
+  const handleCreated = (created: Slot) => {
+    setCreating(false);
+    setChosenSlotId(created.slot_id);
+    const createdDate = toInputDate(new Date(created.date_time_start));
+    if (createdDate === date && loaded?.date === date) {
+      setLoaded({date, slots: [...loaded.slots, created].sort(byStart)});
+    } else {
+      setDate(createdDate);
+    }
+    toast.success(
+      `Created ${slotLabel(created)} on ${new Date(created.date_time_start).toLocaleDateString()}.`,
+    );
   };
 
   const handleSave = async () => {
@@ -166,11 +186,20 @@ export default function TimeSlotManagementPage() {
               )}
             </select>
           </label>
+
+          <button
+            type="button"
+            onClick={() => setCreating(true)}
+            className="cursor-pointer self-end rounded-lg bg-[#24414f] px-5 py-2 text-xs font-semibold text-white transition hover:bg-[#1c3440] sm:ml-auto"
+          >
+            New Slot
+          </button>
         </div>
 
         {!loadingSlots && !slot ? (
           <p className="mt-8 text-sm text-gray-500">
-            There are no time slots on this day. Pick another date.
+            There are no time slots on this day. Pick another date or create
+            one with "New Slot".
           </p>
         ) : (
           <div className="mt-8 flex flex-col gap-8 md:flex-row md:items-start md:justify-between">
@@ -233,6 +262,23 @@ export default function TimeSlotManagementPage() {
           </div>
         )}
       </section>
+
+      {creating && (
+        <NewSlotModal
+          initialDate={date}
+          // reuse the tables of the slot on screen (MH-02), else all of them
+          tableIds={
+            slot
+              ? slot.tables.map((t) => t.table_id)
+              : tables.map((t) => t.table_id)
+          }
+          tablesSource={
+            slot ? `the tables of ${slotLabel(slot)}` : "all the tables"
+          }
+          onCreated={handleCreated}
+          onClose={() => setCreating(false)}
+        />
+      )}
     </div>
   );
 }
