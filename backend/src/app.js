@@ -6,10 +6,13 @@ import morgan from 'morgan';
 import passport from 'passport';
 import LocalStrategy from 'passport-local';
 import session from 'express-session';
+import tableRoutes from './routes/tables.js';
+import reservationRoutes from './routes/reservations.js';
 
 import { sendEmail } from './config/mailer.js';
 
 import wardenRoutes from './routes/warden.js';
+import slotRoutes from './routes/slots.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
@@ -67,10 +70,11 @@ app.use(passport.authenticate('session'));
 
 app.use('/api/auth', authRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Mountain Hut API is running' });
-});
+// Mounts router.post('/'), put('/:tableId'), delete('/:tableId') at /api/tables
+app.use('/api/tables', tableRoutes);
+
+// Mounts router.get('/slots/:slotId/availability') and post('/slots/:slotId/reservations') at /api/slots/...
+app.use('/api', reservationRoutes);
 
 // Test email endpoint (useful to verify your email task works!)
 app.post('/api/test/email', async (req, res) => {
@@ -88,12 +92,16 @@ app.post('/api/test/email', async (req, res) => {
   }
 });
 
+app.use('/api/warden', wardenRoutes);
+
+app.use('/api/slots', slotRoutes);
+
 //error handler 
 app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.use('/api/warden', wardenRoutes);
+
 
 export default app;
