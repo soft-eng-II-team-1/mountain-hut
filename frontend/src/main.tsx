@@ -9,7 +9,7 @@ import HomePage from "./features/home/pages/HomePage";
 import LoginPage from "./features/auth/pages/LoginPage";
 import SignupPage from "./features/auth/pages/SignupPage";
 import AdminLayout from "./features/admin/components/AdminLayout";
-import TableManagementPage from "./features/admin/pages/TableManagementPage";
+import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
 import {STAFF_ROLES} from "./types";
 
