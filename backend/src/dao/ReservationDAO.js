@@ -1,6 +1,7 @@
 import { prisma } from '../../prisma.client.ts';
 import crypto from 'crypto';
 import { assignTables } from '../services/tableAssignment.js';
+import { isSerializationConflict } from './transaction.js';
 
 // How many times a booking is retried when it collides with a concurrent one on the same slot
 const MAX_BOOKING_ATTEMPTS = 3;
@@ -58,18 +59,19 @@ class ReservationDAO {
         };
     }
 
-    static async saveReservation(userId, slotId, people) {
+    // `requirements` are the optional needs of the party (e.g. allergies), null if none
+    static async saveReservation(userId, slotId, people, requirements = null) {
         // Checks and inserts run in a SERIALIZABLE transaction: two hikers booking the
         // same slot at the same time cannot both read the same free seats (overbooking),
         // and the same hiker cannot create two reservations for the slot.
         for (let attempt = 1; ; attempt++) {
             try {
                 return await prisma.$transaction(
-                    tx => this.createReservation(tx, userId, slotId, people),
+                    tx => this.createReservation(tx, userId, slotId, people, requirements),
                     { isolationLevel: 'Serializable' }
                 );
             } catch (error) {
-                if (error.code !== 'P2034') {
+                if (!isSerializationConflict(error)) {
                     throw error;
                 }
                 if (attempt >= MAX_BOOKING_ATTEMPTS) {
@@ -80,7 +82,7 @@ class ReservationDAO {
     }
 
     // Must be called inside a transaction (see saveReservation)
-    static async createReservation(tx, userId, slotId, people) {
+    static async createReservation(tx, userId, slotId, people, requirements = null) {
         // 1. Fetch slot to check the 2-hour cutoff rule
         const slot = await tx.slot.findUnique({
             where: { slot_id: slotId }
@@ -123,6 +125,7 @@ class ReservationDAO {
             data: {
                 reservation_id: newReservationId,
                 people: people,
+                requirements: requirements,
                 slot_id: slotId,
                 user_id: userId
             }
@@ -140,6 +143,37 @@ class ReservationDAO {
         return {
             ...newReservation,
             tables: tableAssignments
+        };
+    }
+
+    // Details shown in the booking confirmation (MH-03): reservation, slot, hiker and tables.
+    // Returns null if the reservation does not exist
+    static async getReservationDetails(reservationId) {
+        const reservation = await prisma.reservation.findUnique({
+            where: { reservation_id: reservationId },
+            include: {
+                slot: true,
+                user: { select: { user_id: true, name: true, surname: true, email: true } },
+                reservation_table: { include: { table: true } }
+            }
+        });
+        if (!reservation) {
+            return null;
+        }
+
+        return {
+            reservation_id: reservation.reservation_id,
+            people: reservation.people,
+            requirements: reservation.requirements,
+            slot: {
+                slot_id: reservation.slot.slot_id,
+                date_time_start: reservation.slot.date_time_start,
+                date_time_end: reservation.slot.date_time_end
+            },
+            hiker: reservation.user,
+            tables: reservation.reservation_table
+                .map(rt => ({ table_id: rt.table_id, number: rt.table.number, seats_reserved: rt.seats_reserved }))
+                .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
         };
     }
 }

@@ -2,12 +2,38 @@ import { Router } from 'express'
 import {body, param, query } from 'express-validator';
 
 import ReservationDAO from '../dao/ReservationDAO.js';
+import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isLoggedIn, isHiker } from '../middlewares/auth.js';
 
 const router = Router();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const MAX_REQUIREMENTS_LENGTH = 500;
+
+// Sends the booking confirmation (MH-03). Returns false instead of throwing when the
+// email cannot be sent: the reservation is already saved and must not fail because of it
+const sendConfirmation = async (reservationId) => {
+    try {
+        const details = await ReservationDAO.getReservationDetails(reservationId);
+        await sendReservationConfirmation(details);
+        return true;
+    } catch (error) {
+        console.error(`Confirmation email for reservation ${reservationId} not sent:`, error);
+        return false;
+    }
+};
+
+// Reservation of the logged hiker, or null if it does not exist or belongs to someone else
+// (in both cases the client gets a 404, so it cannot find out the reservations of others)
+const getOwnReservation = async (req) => {
+    const details = await ReservationDAO.getReservationDetails(req.params.reservationId);
+    if (!details || details.hiker.user_id !== req.user.user_id) {
+        return null;
+    }
+    return details;
+};
 
 router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
     try {
@@ -51,8 +77,21 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
             return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
         }
 
-        const newReservation = await ReservationDAO.saveReservation(req.user.user_id, slotId, people);
-        res.status(201).json(newReservation);
+        // Optional requirements of the party (e.g. allergies): an empty text means no requirements
+        let requirements = req.body.requirements ?? null;
+        if (requirements !== null) {
+            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
+                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
+            }
+            requirements = requirements.trim() || null;
+        }
+
+        const newReservation = await ReservationDAO.saveReservation(req.user.user_id, slotId, people, requirements);
+
+        // MH-03: the hiker receives a confirmation email with the details of the booking
+        const confirmationSent = await sendConfirmation(newReservation.reservation_id);
+
+        res.status(201).json({ ...newReservation, confirmation_sent: confirmationSent });
     } catch (error) {
         if (error.message === "Slot not found") {
             return res.status(404).json({ error: error.message });
@@ -70,6 +109,51 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
         ) {
             return res.status(400).json({ error: error.message });
         }
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// GET /api/reservations/:reservationId
+// Details of the booking confirmation (MH-03), only for the hiker who made the reservation
+router.get('/reservations/:reservationId', isHiker, async (req, res) => {
+    try {
+        if (!UUID_REGEX.test(req.params.reservationId)) {
+            return res.status(422).json({ errors: [{ field: 'reservationId', message: 'reservationId must be a valid UUID' }] });
+        }
+
+        const details = await getOwnReservation(req);
+        if (!details) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+
+        res.status(200).json(details);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// POST /api/reservations/:reservationId/confirmation
+// Sends the confirmation email again (e.g. if it was not sent at booking time, see confirmation_sent)
+router.post('/reservations/:reservationId/confirmation', isHiker, async (req, res) => {
+    try {
+        if (!UUID_REGEX.test(req.params.reservationId)) {
+            return res.status(422).json({ errors: [{ field: 'reservationId', message: 'reservationId must be a valid UUID' }] });
+        }
+
+        const details = await getOwnReservation(req);
+        if (!details) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+
+        try {
+            await sendReservationConfirmation(details);
+        } catch (error) {
+            console.error(`Confirmation email for reservation ${details.reservation_id} not sent:`, error);
+            return res.status(500).json({ error: "Failed to send the confirmation email" });
+        }
+
+        res.status(200).json({ message: `Confirmation email sent to ${details.hiker.email}` });
+    } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
