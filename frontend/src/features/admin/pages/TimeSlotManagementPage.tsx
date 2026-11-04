@@ -4,32 +4,7 @@ import NewSlotModal from "../components/NewSlotModal";
 import {getAllTables, getSlots, updateSlot} from "../../../api/slots";
 import {toast} from "../../../components/popup";
 import type {Slot, Table} from "../../../types";
-
-// "YYYY-MM-DD" of a date in local time, the format of <input type="date">
-const toInputDate = (d: Date) => {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-};
-
-// [start, end) of a local day
-const dayRange = (inputDate: string) => {
-  const [y, m, d] = inputDate.split("-").map(Number);
-  return {from: new Date(y, m - 1, d), to: new Date(y, m - 1, d + 1)};
-};
-
-const formatTime = (iso: string) =>
-  new Date(iso).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-
-// Lunch / Dinner label from the start hour, like in the mockup
-const slotLabel = (slot: Slot) => {
-  const hour = new Date(slot.date_time_start).getHours();
-  const name = hour < 11 ? "Breakfast" : hour < 17 ? "Lunch" : "Dinner";
-  return `${name} (${formatTime(slot.date_time_start)} - ${formatTime(slot.date_time_end)})`;
-};
+import {dayRange, slotLabel, toInputDate} from "../../../lib/slotTime";
 
 const byNumber = (a: Table, b: Table) =>
   a.number.localeCompare(b.number, undefined, {numeric: true});

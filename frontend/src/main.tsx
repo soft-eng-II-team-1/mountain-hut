@@ -11,6 +11,7 @@ import SignupPage from "./features/auth/pages/SignupPage";
 import AdminLayout from "./features/admin/components/AdminLayout";
 import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
+import BookTablePage from "./features/booking/pages/BookTablePage";
 import {STAFF_ROLES} from "./types";
 
 const router = createBrowserRouter([
@@ -24,7 +25,11 @@ const router = createBrowserRouter([
           {index: true, element: <HomePage />},
           {path: "login", element: <LoginPage />},
           {path: "signup", element: <SignupPage />},
-          {path: "services", element: <p>To be implemented</p>},
+          {
+            // MH-01: only hikers can book
+            element: <RequireRole roles={["hiker"]} />,
+            children: [{path: "book", element: <BookTablePage />}],
+          },
         ],
       },
       {

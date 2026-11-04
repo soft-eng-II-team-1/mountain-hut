@@ -9,7 +9,7 @@ const navLinks = [
   // {path: "structure", label: "The structure"},
   // {path: "team", label: "Our team"},
   // {path: "services", label: "Services"},
-  {path: "services", label: "Book"},
+  {path: "book", label: "Book"},
 ];
 
 export default function Header() {
