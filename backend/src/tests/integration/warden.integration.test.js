@@ -34,8 +34,8 @@ const loginAs = async (credentials) => {
 };
 
 describe('POST /api/warden/employees', () => {
-    it('responds 403 if not logged in', async () => {
-        await request(app).post('/api/warden/employees').send(employee).expect(403);
+    it('responds 401 if not logged in', async () => {
+        await request(app).post('/api/warden/employees').send(employee).expect(401);
     });
 
     it('responds 403 if logged in as hiker', async () => {

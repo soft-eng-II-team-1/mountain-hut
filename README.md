@@ -66,3 +66,10 @@ npm run test:integration
 cd backend
 npm run test
 ```
+
+#### 3.4 Coverage
+```bash
+cd backend
+npm run test:coverage
+```
+The summary is printed in the terminal. The full HTML report is generated in `backend/coverage/lcov-report/index.html`.

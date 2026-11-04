@@ -24,3 +24,5 @@ build/
 
 # HTTP Requests
 *.http
+
+coverage/
