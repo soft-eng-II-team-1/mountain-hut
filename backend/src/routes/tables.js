@@ -1,6 +1,6 @@
 import {Router} from 'express';
 import {body, param} from 'express-validator';
-import TableDAO from '../dao/TableDAO.js';
+import TableDAO, {TableError} from '../dao/TableDAO.js';
 import validateRequest from '../middlewares/validateParams.js';
 import {isStaff} from '../middlewares/auth.js';
 
@@ -44,6 +44,9 @@ router.put('/:tableId', isStaff, tableIdParam, tableBodyRules, validateRequest, 
     const updatedTable = await TableDAO.updateTable(tableId, { number, seats });
     res.status(200).json(updatedTable);
   } catch (error) {
+    if (error instanceof TableError) {
+        return res.status(409).json({ error: error.message });
+    }
     if (error.code === 'P2025') {
         return res.status(404).json({ error: "Table not found" });
     }

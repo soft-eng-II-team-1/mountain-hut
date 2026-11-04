@@ -191,6 +191,77 @@ describe('SlotDAO.updateSlot', () => {
         expect(tx.slot.update).not.toHaveBeenCalled();
         expect(tx.slot_table.deleteMany).not.toHaveBeenCalled();
     });
+
+    it('changes the times of a slot without reservations', async () => {
+        setupValidSlot(1);
+        const later = { start: new Date('2030-07-01T19:00:00Z'), end: new Date('2030-07-01T20:00:00Z') };
+
+        await slotDao.updateSlot(SLOT_ID, { ...later, tableIds: ['id-T1'] });
+
+        expect(tx.slot.update).toHaveBeenCalledWith({
+            where: { slot_id: SLOT_ID },
+            data: { date_time_start: later.start, date_time_end: later.end },
+        });
+    });
+
+    it('throws if the times of a slot with reservations change', async () => {
+        setupValidSlot(1);
+        tx.reservation.findFirst.mockResolvedValue({ reservation_id: 'r-1', slot_id: SLOT_ID });
+
+        await expect(slotDao.updateSlot(SLOT_ID, { start: START, end: new Date('2030-07-01T14:00:00Z'), tableIds: ['id-T1'] }))
+            .rejects.toMatchObject({ code: 'HAS_RESERVATIONS' });
+        expect(tx.slot.update).not.toHaveBeenCalled();
+    });
+
+    it('lets the tables of a slot with reservations change if the times stay the same', async () => {
+        setupValidSlot(2);
+        tx.reservation.findFirst.mockResolvedValue({ reservation_id: 'r-1', slot_id: SLOT_ID });
+
+        await slotDao.updateSlot(SLOT_ID, { start: START, end: END, tableIds: ['id-T1', 'id-T3'] });
+
+        expect(tx.slot.update).toHaveBeenCalled();
+    });
+});
+
+// Changes to the slots run in serializable transactions, like the bookings
+describe('SlotDAO transactions', () => {
+    const serializationFailure = () => Object.assign(new Error('write conflict'), { code: 'P2034' });
+
+    it('uses the serializable isolation level', async () => {
+        setupValidSlot(1);
+
+        await slotDao.createSlot({ start: START, end: END, tableIds: ['id-T1'] });
+
+        expect(prismaMock.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+    });
+
+    it('retries when it collides with a concurrent transaction', async () => {
+        setupValidSlot(1);
+        prismaMock.$transaction
+            .mockRejectedValueOnce(serializationFailure())
+            .mockImplementationOnce(async (callback) => callback(tx));
+
+        const result = await slotDao.createSlot({ start: START, end: END, tableIds: ['id-T1'] });
+
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(2);
+        expect(result.slot_id).toBe(SLOT_ID);
+    });
+
+    it('throws CONCURRENT_UPDATE after too many collisions', async () => {
+        setupValidSlot(1);
+        prismaMock.$transaction.mockRejectedValue(serializationFailure());
+
+        await expect(slotDao.updateSlot(SLOT_ID, { start: START, end: END, tableIds: ['id-T1'] }))
+            .rejects.toMatchObject({ code: 'CONCURRENT_UPDATE' });
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(3);
+    });
+
+    it('does not retry on other errors', async () => {
+        prismaMock.$transaction.mockRejectedValue(new Error('connection lost'));
+
+        await expect(slotDao.deleteSlot(SLOT_ID)).rejects.toThrow('connection lost');
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('SlotDAO.deleteSlot', () => {

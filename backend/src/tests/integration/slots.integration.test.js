@@ -275,6 +275,29 @@ describe('Slot capacity and reservations', () => {
 
         expect(await prisma.slot.count({ where: { slot_id: slotId } })).toBe(1);
     });
+
+    it('responds 409 when changing the times of a slot that has reservations', async () => {
+        const agent = await loginAs(employee);
+
+        const res = await agent.put(`/api/slots/${slotId}`).send(slotBody(at(6, 19), at(6, 20), ['B', 'A'])).expect(409);
+
+        expect(res.body.error).toBe('Cannot change the times of a slot that has reservations');
+        const saved = await prisma.slot.findUnique({ where: { slot_id: slotId } });
+        expect(saved.date_time_start.toISOString()).toBe(at(6, 12));
+    });
+
+    it('does not let the seats of a table go below the seats reserved on it', async () => {
+        // Table B has 2 seats, all reserved in the slot
+        const agent = await loginAs(employee);
+        const number = `S-${stamp}-B`;
+
+        const res = await agent.put(`/api/tables/${tableIds.B}`).send({ number, seats: 1 }).expect(409);
+
+        expect(res.body.error).toBe('Cannot set fewer seats than the 2 already reserved on this table in a slot');
+        expect((await prisma.table.findUnique({ where: { table_id: tableIds.B } })).seats).toBe(2);
+
+        await agent.put(`/api/tables/${tableIds.B}`).send({ number, seats: 3 }).expect(200);
+    });
 });
 
 describe('DELETE /api/slots/:slotId', () => {

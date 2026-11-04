@@ -14,6 +14,7 @@ const statusByCode = {
     TABLE_NOT_FOUND: 422,
     SLOT_OVERLAP: 409,
     HAS_RESERVATIONS: 409,
+    CONCURRENT_UPDATE: 409,
 };
 
 const handleError = (err, res, next) => {

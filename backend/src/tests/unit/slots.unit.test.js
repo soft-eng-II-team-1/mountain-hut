@@ -229,6 +229,14 @@ describe('PUT /api/slots/:slotId', () => {
 
         await request(app).put(`/api/slots/${SLOT_ID}`).set('x-test-role', 'employee').send(validBody()).expect(409);
     });
+
+    it('responds 409 if the slot is being modified concurrently', async () => {
+        slotDaoMock.updateSlot.mockRejectedValue(
+            new SlotError('CONCURRENT_UPDATE', 'The slots are being modified by someone else, please try again'),
+        );
+
+        await request(app).put(`/api/slots/${SLOT_ID}`).set('x-test-role', 'employee').send(validBody()).expect(409);
+    });
 });
 
 describe('DELETE /api/slots/:slotId', () => {

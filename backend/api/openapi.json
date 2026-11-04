@@ -11,7 +11,7 @@
     }
   ],
   "paths": {
-     "/api/auth/signup": {
+    "/api/auth/signup": {
       "post": {
         "summary": "Sign up as a hiker",
         "description": "Creates a new user with role hiker and logs them in (sets the session cookie). The role cannot be chosen by the client.",
@@ -275,7 +275,7 @@
             "description": "Table not found"
           },
           "409": {
-            "description": "Table number already exists"
+            "description": "Table number already exists, the new seats are fewer than the seats reserved on the table in a slot that is not over, or the table is being modified concurrently"
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -299,6 +299,239 @@
           },
           "404": {
             "description": "Table not found"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/slots": {
+      "get": {
+        "summary": "List the slots (employee or warden), ordered by start time",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Only slots that end after this date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "description": "Only slots that start before this date-time",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of slots with their tables and total seats",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Slot"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a slot with its tables (employee or warden)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Slot created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "The slot overlaps an existing slot, or it is being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/slots/{slot_id}": {
+      "parameters": [
+        {
+          "name": "slot_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Get a slot with its tables (employee or warden)",
+        "responses": {
+          "200": {
+            "description": "Slot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "put": {
+        "summary": "Modify the times and replace the whole list of tables of a slot (employee or warden)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SlotInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Slot updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slot overlaps an existing slot, a removed table has reservations in the slot, the times of a slot with reservations are changed, or the slot is being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a slot without reservations (employee or warden)",
+        "responses": {
+          "204": {
+            "description": "Slot deleted successfully (No Content returned)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slot has reservations, or it is being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "422": {
             "$ref": "#/components/responses/ValidationError"
@@ -430,7 +663,7 @@
               }
             }
           },
-           "400": {
+          "400": {
             "description": "Insufficient seats for the party size, less than 2 hours before the slot starts, or no tables assigned to the slot",
             "content": {
               "application/json": {
@@ -476,7 +709,7 @@
   },
   "components": {
     "schemas": {
-       "SignupInput": {
+      "SignupInput": {
         "type": "object",
         "required": [
           "name",
@@ -642,7 +875,7 @@
           }
         }
       },
-       "Error": {
+      "Error": {
         "type": "object",
         "properties": {
           "error": {
@@ -678,6 +911,66 @@
                 }
               }
             }
+          }
+        }
+      },
+      "SlotInput": {
+        "type": "object",
+        "required": [
+          "date_time_start",
+          "date_time_end",
+          "table_ids"
+        ],
+        "properties": {
+          "date_time_start": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Must be in the future",
+            "example": "2030-07-01T12:00:00Z"
+          },
+          "date_time_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Must be after date_time_start",
+            "example": "2030-07-01T13:00:00Z"
+          },
+          "table_ids": {
+            "type": "array",
+            "description": "Tables available in the slot (duplicates are ignored)",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        }
+      },
+      "Slot": {
+        "type": "object",
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date_time_start": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2030-07-01T12:00:00.000Z"
+          },
+          "date_time_end": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2030-07-01T13:00:00.000Z"
+          },
+          "tables": {
+            "type": "array",
+            "description": "Sorted by table number",
+            "items": {
+              "$ref": "#/components/schemas/Table"
+            }
+          },
+          "total_seats": {
+            "type": "integer",
+            "example": 6
           }
         }
       }

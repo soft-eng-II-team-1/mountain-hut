@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 
 import { prisma } from '../../prisma.client.ts';
+import { runSerializable } from './transaction.js';
 
 // Error with a code that the routes translate into an HTTP status
 export class SlotError extends Error {
@@ -11,6 +12,8 @@ export class SlotError extends Error {
 }
 
 const includeTables = { slot_table: { include: { table: true } } };
+
+const concurrentUpdate = () => new SlotError('CONCURRENT_UPDATE', 'The slots are being modified by someone else, please try again');
 
 // Shape returned to the client: slot + its tables + total capacity
 const toSlotResponse = (slot) => {
@@ -88,7 +91,7 @@ export default function SlotDAO() {
     this.createSlot = async ({ start, end, tableIds }) => {
         const ids = [...new Set(tableIds)];
 
-        return prisma.$transaction(async (tx) => {
+        return runSerializable(async (tx) => {
             await checkNoOverlap(tx, start, end);
             await checkTablesExist(tx, ids);
 
@@ -100,15 +103,16 @@ export default function SlotDAO() {
 
             const created = await tx.slot.findUnique({ where: { slot_id: slotId }, include: includeTables });
             return toSlotResponse(created);
-        });
+        }, concurrentUpdate);
     };
 
     // Updates start, end and the whole list of tables of a slot in one transaction.
-    // A table that already has reservations in this slot cannot be removed
+    // A table that already has reservations in this slot cannot be removed,
+    // and the times of a slot that has reservations cannot change
     this.updateSlot = async (slotId, { start, end, tableIds }) => {
         const ids = [...new Set(tableIds)];
 
-        return prisma.$transaction(async (tx) => {
+        return runSerializable(async (tx) => {
             const slot = await tx.slot.findUnique({ where: { slot_id: slotId } });
             if (!slot) {
                 throw new SlotError('SLOT_NOT_FOUND', 'Slot not found');
@@ -127,6 +131,15 @@ export default function SlotDAO() {
                 throw new SlotError('HAS_RESERVATIONS', 'Cannot remove a table that has reservations in this slot');
             }
 
+            const timesChanged = slot.date_time_start.getTime() !== start.getTime()
+                || slot.date_time_end.getTime() !== end.getTime();
+            if (timesChanged) {
+                const reservation = await tx.reservation.findFirst({ where: { slot_id: slotId } });
+                if (reservation) {
+                    throw new SlotError('HAS_RESERVATIONS', 'Cannot change the times of a slot that has reservations');
+                }
+            }
+
             await tx.slot.update({
                 where: { slot_id: slotId },
                 data: { date_time_start: start, date_time_end: end },
@@ -136,12 +149,12 @@ export default function SlotDAO() {
 
             const updated = await tx.slot.findUnique({ where: { slot_id: slotId }, include: includeTables });
             return toSlotResponse(updated);
-        });
+        }, concurrentUpdate);
     };
 
     // Deletes a slot, only if it has no reservations
     this.deleteSlot = async (slotId) => {
-        return prisma.$transaction(async (tx) => {
+        return runSerializable(async (tx) => {
             const slot = await tx.slot.findUnique({ where: { slot_id: slotId } });
             if (!slot) {
                 throw new SlotError('SLOT_NOT_FOUND', 'Slot not found');
@@ -154,6 +167,6 @@ export default function SlotDAO() {
 
             await tx.slot_table.deleteMany({ where: { slot_id: slotId } });
             await tx.slot.delete({ where: { slot_id: slotId } });
-        });
+        }, concurrentUpdate);
     };
 }
