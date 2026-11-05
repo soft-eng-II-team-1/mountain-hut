@@ -801,6 +801,18 @@
             "nullable": true,
             "example": "+393331234567"
           },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "example": "Registered mountain guide"
+          },
+          "emergency_contact": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100,
+            "example": "Mario Rossi - +391234567890"
+          },
           "password": {
             "type": "string",
             "format": "password",

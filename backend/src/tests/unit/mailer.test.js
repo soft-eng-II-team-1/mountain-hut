@@ -49,6 +49,7 @@ describe('Mailer Service (mailer.js)', () => {
                     user: 'user@example.com',
                     pass: 'secret_password',
                 },
+                secure: true,
             });
             expect(mockCreateTestAccount).not.toHaveBeenCalled();
         });
@@ -62,12 +63,13 @@ describe('Mailer Service (mailer.js)', () => {
             await initMailer();
 
             expect(mockCreateTransport).toHaveBeenCalledWith({
-                host: 'smtp.ethereal.email',
-                port: 587,
+                host: 'smtp.gmail.com',
+                port: 465,
                 auth: {
                     user: 'user@example.com',
                     pass: 'secret_password',
                 },
+                secure: false,
             });
         });
 
@@ -119,6 +121,7 @@ describe('Mailer Service (mailer.js)', () => {
 
         test('should send an email with all specified parameters (including HTML)', async () => {
             mockSendMail.mockResolvedValueOnce({ messageId: 'msg-id-123' });
+            process.env.SMTP_USER = 'mountain_hut_system@example.com';
 
             const result = await sendEmail(
                 'recipient@example.com',
@@ -128,7 +131,7 @@ describe('Mailer Service (mailer.js)', () => {
             );
 
             expect(mockSendMail).toHaveBeenCalledWith({
-                from: '"Mountain Hut System" <no-reply@mountainhut.polito.it>',
+                from: '"Mountain Hut System" <mountain_hut_system@example.com>',
                 to: 'recipient@example.com',
                 subject: 'Test Subject',
                 text: 'Plain text body',

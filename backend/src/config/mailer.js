@@ -8,12 +8,13 @@ let initPromise;
 const createTransporter = async () => {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-      port: Number(process.env.SMTP_PORT) || 587,
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 465,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      secure: Number(process.env.SMTP_PORT) === 465,
     });
     console.log('Email system configured with .env credentials.');
   } else {
@@ -51,7 +52,7 @@ export const sendEmail = async (to, subject, text, html) => {
   await (initPromise ?? initMailer());
 
   const info = await transporter.sendMail({
-    from: '"Mountain Hut System" <no-reply@mountainhut.polito.it>',
+    from: `"Mountain Hut System" <${process.env.SMTP_USER}>`,
     to,
     subject,
     text,

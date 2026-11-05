@@ -5,6 +5,11 @@ import react from "@vitejs/plugin-react";
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  css: {
+    postcss: {
+      plugins: [],
+    },
+  },
   server: {
     proxy: {
       // Proxy any requests starting with /api to the backend
