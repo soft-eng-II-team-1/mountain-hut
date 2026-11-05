@@ -169,4 +169,46 @@ export default function SlotDAO() {
             await tx.slot.delete({ where: { slot_id: slotId } });
         }, concurrentUpdate);
     };
+
+    //slots a hiker can still book: with available seats>= partySize and starting at leat 2 hours from now
+    this.getAvailableSlots = async ({ partySize = 1, from, to } = {}) => {
+        const minStart = new Date(Date.now() + 2 * 60 * 60 * 1000); // at least 2 hours from now
+        const start = { gt: from && from > minStart ? from : minStart };
+        if(to) start.lt = to;
+
+        const slots = await prisma.slot.findMany({
+            where: { date_time_start: start },
+            include: {
+                slot_table: { include: { table: true } },
+                reservation: { include: { reservation_table: true } },
+            },
+            orderBy: { date_time_start: 'asc' },
+        });
+
+        const result = [];
+        for (const slot of slots) {
+            //toatl capacity of slot
+            const totalSeats = slot.slot_table.reduce((sum, st) => sum + st.table.seats, 0);
+
+            //seats already reserved
+            const reservedSeats = slot.reservation.flatMap((r) => r.reservation_table).reduce((sum,rt) => sum + rt.seats_reserved,0);
+
+            const freeSeats = totalSeats - reservedSeats;
+
+            //available seats < partySize --> skip this slot
+            if(freeSeats < partySize){
+                continue;
+            }
+
+            result.push({
+                slot_id: slot.slot_id,
+                date_time_start: slot.date_time_start,
+                date_time_end: slot.date_time_end,  
+                free_seats: freeSeats,
+            });
+        }
+
+        return result;
+    
+    };
 }

@@ -1,8 +1,11 @@
 import nodemailer from 'nodemailer';
 
 let transporter;
+// Promise of the last initialization: concurrent emails wait for the same one,
+// so the transporter (and the Ethereal test account) is created only once
+let initPromise;
 
-export const initMailer = async () => {
+const createTransporter = async () => {
   if (process.env.SMTP_USER && process.env.SMTP_PASS) {
     transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.ethereal.email',
@@ -29,10 +32,23 @@ export const initMailer = async () => {
   }
 };
 
+// Called once at startup (see index.js). Every call creates a new transporter
+export const initMailer = () => {
+  const promise = createTransporter().catch((error) => {
+    // Lets the next email try again instead of failing forever
+    if (initPromise === promise) {
+      initPromise = undefined;
+    }
+    throw error;
+  });
+  initPromise = promise;
+  return promise;
+};
+
 export const sendEmail = async (to, subject, text, html) => {
-  if (!transporter) {
-    await initMailer();
-  }
+  // Normally already done at startup; here only if it was not (e.g. in the tests).
+  // If an initialization is in progress, waits for it instead of starting another one
+  await (initPromise ?? initMailer());
 
   const info = await transporter.sendMail({
     from: '"Mountain Hut System" <no-reply@mountainhut.polito.it>',
