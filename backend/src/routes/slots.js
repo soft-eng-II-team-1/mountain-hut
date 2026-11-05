@@ -3,7 +3,7 @@ import { body, param, query } from 'express-validator';
 
 import SlotDAO, { SlotError } from '../dao/SlotDAO.js';
 import validateRequest from '../middlewares/validateParams.js';
-import { isStaff } from '../middlewares/auth.js';
+import { isStaff, isLoggedIn } from '../middlewares/auth.js';
 
 const router = express.Router();
 const slotDao = new SlotDAO();
@@ -46,6 +46,13 @@ const listRules = [
     query('to').optional().isISO8601().withMessage('to must be an ISO 8601 date'),
 ];
 
+//rules for the hiker input info to find available slots
+const availableSlotsRules = [
+    query('partySize').exists({values: 'falsy'}).withMessage('partySize is required').bail().isInt({ min: 1 }).withMessage('partySize must be a positive integer').toInt(),
+    query('from').exists({values: 'falsy'}).withMessage('from is required').bail().isISO8601().withMessage('from must be an ISO 8601 date'),
+    query('to').exists({values: 'falsy'}).withMessage('to is required').bail().isISO8601().withMessage('to must be an ISO 8601 date').bail().custom((value, { req }) => new Date(value) > new Date(req.query.from)).withMessage('to must be after from'),
+];
+
 const slotFromBody = (body) => ({
     start: new Date(body.date_time_start),
     end: new Date(body.date_time_end),
@@ -56,6 +63,7 @@ const slotFromBody = (body) => ({
 
 // GET /api/slots?from=...&to=...
 // List of slots with their tables and total seats
+//staff only
 router.get('/', isStaff, listRules, validateRequest, async (req, res, next) => {
     try {
         const from = req.query.from ? new Date(req.query.from) : undefined;
@@ -67,7 +75,23 @@ router.get('/', isStaff, listRules, validateRequest, async (req, res, next) => {
     }
 });
 
+// GET /api/slots/available?partySize=...&from=...&to=...
+// List of available slots for hikers to book
+router.get('/available', isLoggedIn, availableSlotsRules, validateRequest, async (req, res, next) => {
+    try{
+        const slots = await slotDao.getAvailableSlots({
+            partySize: Number(req.query.partySize),
+            from: new Date(req.query.from),
+            to: new Date(req.query.to)
+        });
+        return res.status(200).json(slots);
+    } catch (err) {
+        return next(err);
+    }
+});
+
 // GET /api/slots/:slotId
+//staff only
 router.get('/:slotId', isStaff, slotIdParam, validateRequest, async (req, res, next) => {
     try {
         const slot = await slotDao.getSlotById(req.params.slotId);
