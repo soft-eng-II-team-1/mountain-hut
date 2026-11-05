@@ -401,6 +401,69 @@
         }
       }
     },
+        "/api/slots/available": {
+      "get": {
+        "summary": "List the slots a hiker can book for a party in a time range (any logged-in user)",
+        "description": "Returns the slots that start in [from, to), start at least 2 hours from now and have at least partySize free seats, ordered by start time. ",
+        "parameters": [
+          {
+            "name": "partySize",
+            "in": "query",
+            "required": true,
+            "description": "Number of people in the party",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "example": 4
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "description": "Only slots that start after this date-time (e.g. start of the chosen day)",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2030-07-01T00:00:00.000Z"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "description": "Only slots that start before this date-time (e.g. start of the next day). Must be after from",
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "example": "2030-07-02T00:00:00.000Z"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bookable slots with their free seats (empty array if none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AvailableSlot"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+
     "/api/slots/{slot_id}": {
       "parameters": [
         {
@@ -971,6 +1034,30 @@
           "total_seats": {
             "type": "integer",
             "example": 6
+          }
+        }
+      },
+      "AvailableSlot": {
+        "type": "object",
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "date_time_start": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2030-07-01T12:00:00.000Z"
+          },
+          "date_time_end": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2030-07-01T13:00:00.000Z"
+          },
+          "free_seats": {
+            "type": "integer",
+            "description": "Seats still free in the slot (always >= partySize)",
+            "example": 10
           }
         }
       }

@@ -1,5 +1,12 @@
 import { jest } from '@jest/globals';
 
+const actualTableAssignment = await jest.requireActual('../../services/tableAssignment.js');
+const mockAssignTables = jest.fn(actualTableAssignment.assignTables);
+
+jest.unstable_mockModule('../../services/tableAssignment.js', () => ({
+    assignTables: mockAssignTables,
+}));
+
 // Transaction client mock: the same object is used as "tx" inside $transaction
 const tx = {
     slot: { findUnique: jest.fn() },
@@ -10,6 +17,7 @@ const tx = {
 
 const prismaMock = {
     ...tx,
+    reservation: { findUnique: jest.fn() },
     $transaction: jest.fn(),
 };
 
@@ -52,6 +60,7 @@ const setupValidBooking = () => {
 beforeEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
+    mockAssignTables.mockImplementation(actualTableAssignment.assignTables);
     // By default the transaction just runs the callback with the tx mock
     prismaMock.$transaction.mockImplementation(async (callback) => callback(tx));
 });
@@ -247,6 +256,14 @@ describe('ReservationDAO.saveReservation - business rules', () => {
         expect(tx.reservation.create).not.toHaveBeenCalled();
     });
 
+    it('throws if assignTables returns null', async () => {
+        setupValidBooking();
+        mockAssignTables.mockReturnValueOnce(null);
+
+        await expect(ReservationDAO.saveReservation(USER_ID, SLOT_ID, 2))
+            .rejects.toThrow('Insufficient seats available for this party size');
+    });
+
     it('accepts a party that takes exactly the last free seats', async () => {
         setupValidBooking();
         tx.reservation_table.findMany.mockResolvedValue(reserved(['T1', 4], ['T3', 6]));
@@ -295,5 +312,69 @@ describe('ReservationDAO.saveReservation - concurrency retries', () => {
 
         await expect(ReservationDAO.saveReservation(USER_ID, SLOT_ID, 2)).rejects.toThrow('Slot not found');
         expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('ReservationDAO.getReservationDetails', () => {
+    it('returns null when the reservation does not exist', async () => {
+        prismaMock.reservation.findUnique.mockResolvedValue(null);
+
+        const result = await ReservationDAO.getReservationDetails('non-existent-id');
+
+        expect(prismaMock.reservation.findUnique).toHaveBeenCalledWith({
+            where: { reservation_id: 'non-existent-id' },
+            include: {
+                slot: true,
+                user: { select: { user_id: true, name: true, surname: true, email: true } },
+                reservation_table: { include: { table: true } },
+            },
+        });
+        expect(result).toBeNull();
+    });
+
+    it('returns formatted reservation details with sorted tables', async () => {
+        prismaMock.reservation.findUnique.mockResolvedValue({
+            reservation_id: 'res-100',
+            people: 4,
+            requirements: 'Gluten free',
+            slot: {
+                slot_id: SLOT_ID,
+                date_time_start: new Date('2026-07-20T12:00:00Z'),
+                date_time_end: new Date('2026-07-20T14:00:00Z'),
+            },
+            user: {
+                user_id: USER_ID,
+                name: 'Mario',
+                surname: 'Rossi',
+                email: 'mario.rossi@example.com',
+            },
+            reservation_table: [
+                { table_id: 'id-T10', seats_reserved: 2, table: { number: 'T10' } },
+                { table_id: 'id-T2', seats_reserved: 2, table: { number: 'T2' } },
+            ],
+        });
+
+        const result = await ReservationDAO.getReservationDetails('res-100');
+
+        expect(result).toEqual({
+            reservation_id: 'res-100',
+            people: 4,
+            requirements: 'Gluten free',
+            slot: {
+                slot_id: SLOT_ID,
+                date_time_start: new Date('2026-07-20T12:00:00Z'),
+                date_time_end: new Date('2026-07-20T14:00:00Z'),
+            },
+            hiker: {
+                user_id: USER_ID,
+                name: 'Mario',
+                surname: 'Rossi',
+                email: 'mario.rossi@example.com',
+            },
+            tables: [
+                { table_id: 'id-T2', number: 'T2', seats_reserved: 2 },
+                { table_id: 'id-T10', number: 'T10', seats_reserved: 2 },
+            ],
+        });
     });
 });

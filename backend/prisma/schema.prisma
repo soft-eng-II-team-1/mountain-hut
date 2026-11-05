@@ -12,6 +12,7 @@ datasource db {
 model reservation {
   reservation_id    String              @id @db.Uuid
   people            Int
+  requirements      String?
   slot_id           String              @db.Uuid
   user_id           String              @db.Uuid
   slot              slot                @relation(fields: [slot_id], references: [slot_id], onDelete: NoAction, onUpdate: NoAction)
