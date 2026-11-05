@@ -1,5 +1,8 @@
 import type {Slot} from "../types";
 
+// the start and end of any slot (staff or bookable)
+type SlotTimes = Pick<Slot, "date_time_start" | "date_time_end">;
+
 // "YYYY-MM-DD" of a date in local time, the format of <input type="date">
 export const toInputDate = (d: Date) => {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -30,11 +33,11 @@ export const formatDate = (iso: string) =>
 export type Meal = "Breakfast" | "Lunch" | "Dinner";
 
 // The meal a slot belongs to, from its start hour
-export const mealOf = (slot: Slot): Meal => {
+export const mealOf = (slot: SlotTimes): Meal => {
   const hour = new Date(slot.date_time_start).getHours();
   return hour < 11 ? "Breakfast" : hour < 17 ? "Lunch" : "Dinner";
 };
 
 // "Dinner (19:30 - 21:30)"
-export const slotLabel = (slot: Slot) =>
+export const slotLabel = (slot: SlotTimes) =>
   `${mealOf(slot)} (${formatTime(slot.date_time_start)} - ${formatTime(slot.date_time_end)})`;

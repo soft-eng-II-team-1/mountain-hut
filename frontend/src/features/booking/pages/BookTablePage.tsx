@@ -1,10 +1,5 @@
 import {useEffect, useState} from "react";
-import {
-  bookTable,
-  checkAvailability,
-  getBookableSlots,
-} from "../../../api/reservations";
-import {ApiError} from "../../../api/client";
+import {bookTable, getBookableSlots} from "../../../api/reservations";
 import {toast} from "../../../components/popup";
 import {
   dayRange,
@@ -14,27 +9,16 @@ import {
   toInputDate,
   type Meal,
 } from "../../../lib/slotTime";
-import type {Reservation, Slot} from "../../../types";
+import type {BookableSlot, Reservation} from "../../../types";
 
-// MH-01: a hiker can book up to 2 hours before the slot starts
-const BOOKING_CUTOFF_MS = 2 * 60 * 60 * 1000;
 const MIN_GUESTS = 1;
 const MAX_GUESTS = 30;
 
 type LoadedSlots = {
-  // date + reload counter they were loaded for
+  // date + party size + reload counter they were loaded for
   key: string;
-  slots: Slot[];
-  // when they were loaded, to apply the 2 hour cutoff
-  at: number;
-  // set when the backend refuses to list slots
+  slots: BookableSlot[];
   error?: string;
-};
-
-type AvailabilityState = {
-  key: string;
-  ok: boolean;
-  message: string;
 };
 
 const fieldClass =
@@ -51,85 +35,42 @@ export default function BookTablePage() {
   const [loaded, setLoaded] = useState<LoadedSlots | null>(null);
   // bumped to load the same day again (e.g. after a booking)
   const [reload, setReload] = useState(0);
-  const loadKey = `${date}#${reload}`;
+  const loadKey = `${date}#${guests}#${reload}`;
   const [chosenMeal, setChosenMeal] = useState<Meal | "">("");
   const [chosenSlotId, setChosenSlotId] = useState("");
-  const [availability, setAvailability] = useState<AvailabilityState | null>(
-    null,
-  );
-  // bumped to check the free seats again (e.g. after a failed booking)
-  const [recheck, setRecheck] = useState(0);
   const [booking, setBooking] = useState(false);
   const [booked, setBooked] = useState<{
     reservation: Reservation;
-    slot: Slot;
+    slot: BookableSlot;
   } | null>(null);
 
-  // load the slots of the chosen day
+  // slots of the chosen day that still have room for the party.
+  // The backend already hides full slots and slots starting in less than 2 hours (MH-01)
   useEffect(() => {
     if (!date) return;
-    const key = `${date}#${reload}`;
+    const key = `${date}#${guests}#${reload}`;
     let cancelled = false;
     const {from, to} = dayRange(date);
-    getBookableSlots(from, to)
+    getBookableSlots(from, to, guests)
       .then((slots) => {
-        if (!cancelled) setLoaded({key, slots, at: Date.now()});
+        if (!cancelled) setLoaded({key, slots});
       })
       .catch((err: Error) => {
-        if (cancelled) return;
-        const error =
-          err instanceof ApiError && err.status === 403
-            ? "Online booking times are not open yet. Please try again later."
-            : err.message;
-        setLoaded({key, slots: [], at: Date.now(), error});
+        if (!cancelled) setLoaded({key, slots: [], error: err.message});
       });
     return () => {
       cancelled = true;
     };
-  }, [date, reload]);
+  }, [date, guests, reload]);
 
   const loading = loaded?.key !== loadKey;
-  const allSlots = loading ? [] : loaded.slots;
-  const bookable = loading
-    ? []
-    : allSlots.filter(
-        (s) =>
-          new Date(s.date_time_start).getTime() - loaded.at >=
-          BOOKING_CUTOFF_MS,
-      );
+  const bookable = loading ? [] : loaded.slots;
 
   const meals = [...new Set(bookable.map(mealOf))];
   const meal = meals.includes(chosenMeal as Meal) ? chosenMeal : meals[0];
   const mealSlots = bookable.filter((s) => mealOf(s) === meal);
   const slot =
     mealSlots.find((s) => s.slot_id === chosenSlotId) ?? mealSlots[0];
-
-  // check that the party fits whenever the slot or the party size changes
-  const availabilityKey = slot ? `${slot.slot_id}:${guests}:${recheck}` : "";
-  useEffect(() => {
-    if (!availabilityKey) return;
-    let cancelled = false;
-    const [slotId] = availabilityKey.split(":");
-    checkAvailability(slotId, guests)
-      .then((a) => {
-        if (cancelled) return;
-        setAvailability({
-          key: availabilityKey,
-          ok: true,
-          message: `${a.totalAvailableSeats} seats free`,
-        });
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        setAvailability({key: availabilityKey, ok: false, message: err.message});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [availabilityKey, guests]);
-
-  const checking = !!slot && availability?.key !== availabilityKey;
-  const fits = !checking && !!availability?.ok;
 
   const handleBook = async () => {
     if (!slot) return;
@@ -140,8 +81,8 @@ export default function BookTablePage() {
       toast.success("Your table is booked!");
     } catch (err) {
       toast.error((err as Error).message);
-      // the free seats may have changed, check again
-      setRecheck((r) => r + 1);
+      // the free seats may have changed, load them again
+      setReload((r) => r + 1);
     } finally {
       setBooking(false);
     }
@@ -157,11 +98,9 @@ export default function BookTablePage() {
     ? null
     : loaded.error
       ? loaded.error
-      : allSlots.length === 0
-        ? "There are no meal services on this day. Please pick another date."
-        : bookable.length === 0
-          ? "Bookings for this day are closed: you can book up to 2 hours before the meal."
-          : null;
+      : bookable.length === 0
+        ? `No time slot on this day has room for ${guests} ${guests === 1 ? "guest" : "guests"}. Bookings close 2 hours before the meal: try another date or fewer guests.`
+        : null;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-12 text-[#23404d]">
@@ -296,24 +235,15 @@ export default function BookTablePage() {
               </dl>
 
               {slot && (
-                <p
-                  role="status"
-                  className={`mt-6 text-center text-xs ${
-                    checking
-                      ? "text-gray-500"
-                      : fits
-                        ? "text-green-700"
-                        : "text-red-600"
-                  }`}
-                >
-                  {checking ? "Checking availability…" : availability?.message}
+                <p role="status" className="mt-6 text-center text-xs text-green-700">
+                  {slot.free_seats} {slot.free_seats === 1 ? "seat" : "seats"} free
                 </p>
               )}
 
               <button
                 type="button"
                 onClick={handleBook}
-                disabled={!slot || !fits || booking}
+                disabled={!slot || loading || booking}
                 className="mt-4 cursor-pointer self-center rounded-lg bg-[#cc6000] px-6 py-2 text-lg font-semibold text-white shadow-md transition hover:bg-[#b35400] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {booking ? "Booking…" : "Find a Table and Book"}
@@ -343,7 +273,7 @@ export default function BookTablePage() {
 
 type BookingConfirmedProps = {
   reservation: Reservation;
-  slot: Slot;
+  slot: BookableSlot;
   onBookAnother: () => void;
 };
 

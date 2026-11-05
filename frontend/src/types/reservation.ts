@@ -1,8 +1,9 @@
-// GET /api/slots/:slotId/availability?partySize=N (when the party fits)
-export type Availability = {
-  available: boolean;
-  totalAvailableSeats: number;
-  availableTables: {table_id: string; number: string; remainingSeats: number}[];
+// GET /api/slots/available: a slot a hiker can book
+export type BookableSlot = {
+  slot_id: string;
+  date_time_start: string;
+  date_time_end: string;
+  free_seats: number;
 };
 
 // POST /api/slots/:slotId/reservations
