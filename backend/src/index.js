@@ -3,8 +3,10 @@ import app from './app.js';
 
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, async () => {
-  await initMailer();
+// The mailer is initialized once, before accepting requests
+await initMailer();
+
+app.listen(PORT, () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
 });
 
