@@ -28,15 +28,57 @@ describe('Reservation Confirmation Service', () => {
     });
 
     describe('buildConfirmationEmail', () => {
-        test('should build the correct email object from reservation details', () => {
+        test('should build the email with recipient, subject, text and html', () => {
             const email = buildConfirmationEmail(mockDetails);
 
-            expect(email).toEqual({
-                to: 'mario.rossi@example.com',
-                subject: 'Mountain Hut - Booking confirmation',
-                text: JSON.stringify(mockDetails, null, 2),
-            });
+            expect(email.to).toBe('mario.rossi@example.com');
+            expect(email.subject).toBe('Mountain Hut - Booking confirmation');
+            expect(typeof email.text).toBe('string');
+            expect(typeof email.html).toBe('string');
         });
+
+        test('should include the reservation details in text and html', () => {
+            const { text, html } = buildConfirmationEmail(mockDetails);
+
+            for (const body of [text, html]) {
+                expect(body).toContain('123e4567-e89b-12d3-a456-426655440000');
+                expect(body).toContain('Mario Rossi');
+                expect(body).toContain('Wednesday, 15 July 2026');
+                // 10:00Z -> 12:00 in Europe/Rome (CEST)
+                expect(body).toContain('12:00 - 14:00');
+                expect(body).toContain('4 people');
+                expect(body).toContain('Vegetarian meals required');
+            }
+        });
+
+        test('should escape user-written text in the html', () => {
+            const { html } = buildConfirmationEmail({
+                ...mockDetails,
+                requirements: '<script>alert("x")</script>',
+            });
+
+            expect(html).not.toContain('<script>');
+            expect(html).toContain('&lt;script&gt;');
+        });
+
+        test('should show "None" when there are no requirements', () => {
+            const { text } = buildConfirmationEmail({ ...mockDetails, requirements: null });
+
+            expect(text).toContain('Requirements: None');
+        });
+
+        test('should list the tables when provided', () => {
+            const { text } = buildConfirmationEmail({
+                ...mockDetails,
+                tables: [
+                    { number: 'T02', seats_reserved: 3 },
+                    { number: 'T04', seats_reserved: 1 },
+                ],
+            });
+
+            expect(text).toContain('Tables: T02 (3 seats), T04 (1 seat)');
+        });
+
 
         test('should correctly extract the recipient email address', () => {
             const customDetails = {
@@ -53,18 +95,20 @@ describe('Reservation Confirmation Service', () => {
     describe('sendReservationConfirmation', () => {
         test('should call sendEmail with parameters provided by buildConfirmationEmail', async () => {
             sendEmail.mockResolvedValue({ messageId: 'msg-123' });
+            const expected = buildConfirmationEmail(mockDetails);
 
             const result = await sendReservationConfirmation(mockDetails);
 
             expect(sendEmail).toHaveBeenCalledTimes(1);
             expect(sendEmail).toHaveBeenCalledWith(
-                'mario.rossi@example.com',
-                'Mountain Hut - Booking confirmation',
-                JSON.stringify(mockDetails, null, 2),
-                undefined
+                expected.to,
+                expected.subject,
+                expected.text,
+                expected.html,
             );
             expect(result).toEqual({ messageId: 'msg-123' });
         });
+
 
         test('should propagate errors when sendEmail fails', async () => {
             const networkError = new Error('SMTP connection failure');
