@@ -16,6 +16,8 @@ CREATE TABLE "user" (
   "name" text NOT NULL,
   "surname" text NOT NULL,
   "phone" text,
+  "notes" text,
+  "emergency_contact" text,
   "email" text UNIQUE NOT NULL,
   "hash" text NOT NULL,
   "salt" text NOT NULL

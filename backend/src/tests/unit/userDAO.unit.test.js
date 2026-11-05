@@ -94,4 +94,25 @@ describe('UserDAO.createUser', () => {
 
         await expect(userDao.createUser(newUser)).rejects.toThrow('DB down');
     });
+
+    it('stores notes and emergency contact when given', async () => {
+        prismaMock.user.create.mockImplementation(async ({ data }) => data);
+
+        await userDao.createUser({ ...newUser, notes: 'Registered mountain guide', emergency_contact: 'Marco +391234567890' });
+
+        const { data } = prismaMock.user.create.mock.calls[0][0];
+        expect(data.notes).toBe('Registered mountain guide');
+        expect(data.emergency_contact).toBe('Marco +391234567890');
+    });
+
+    it('stores null notes and emergency contact when missing', async () => {
+        prismaMock.user.create.mockImplementation(async ({ data }) => data);
+
+        await userDao.createUser(newUser);
+
+        const { data } = prismaMock.user.create.mock.calls[0][0];
+        expect(data.notes).toBeNull();
+        expect(data.emergency_contact).toBeNull();
+    });
+
 });

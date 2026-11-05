@@ -24,14 +24,16 @@ const signupRules = [
         .matches(/^\+?[0-9 ]{6,20}$/).withMessage('Phone number is not valid'),
     body('password').isString()
         .isLength({ min: 8, max: 128 }).withMessage('Password must be 8-128 characters long'),
-];
+    body('notes').optional({ values: 'falsy' }).trim().isLength({ max: 256 }).withMessage('Notes are too long'),
+    body('emergency_contact').optional({ values: 'falsy' }).trim().isLength({ max: 100 }).withMessage('Emergency contact information is too long'),
+    ];
 
 // POST /api/auth/signup
 //registers a new hiker and opens a session for them
 router.post('/signup', signupRules, validateRequest, async (req, res, next) => {
     try{
-        const { name, surname, email, phone, password } = req.body;
-        const user = await userDAO.createUser({ name, surname, email, phone, password });
+        const { name, surname, email, phone, notes, emergency_contact, password } = req.body;
+        const user = await userDAO.createUser({ name, surname, email, phone, notes, emergency_contact, password });
         
         if(!user) {
             return res.status(409).json({ error: 'Email already registered' });
