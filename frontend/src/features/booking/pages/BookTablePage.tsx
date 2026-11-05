@@ -185,7 +185,8 @@ export default function BookTablePage() {
               ) : (
                 mealSlots.map((s) => (
                   <option key={s.slot_id} value={s.slot_id}>
-                    {formatTime(s.date_time_start)}
+                    {formatTime(s.date_time_start)} -{" "}
+                    {formatTime(s.date_time_end)}
                   </option>
                 ))
               )}

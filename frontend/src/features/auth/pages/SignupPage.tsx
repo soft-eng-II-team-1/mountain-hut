@@ -12,9 +12,15 @@ type Fields = {
   surname: string;
   email: string;
   phone: string;
+  notes: string;
+  emergencyContact: string;
   password: string;
   confirmPassword: string;
 };
+
+// same limits as the backend signup rules
+const NOTES_MAX = 256;
+const EMERGENCY_CONTACT_MAX = 100;
 
 type Errors = Partial<Record<keyof Fields, string>>;
 
@@ -23,6 +29,8 @@ const emptyForm: Fields = {
   surname: "",
   email: "",
   phone: "",
+  notes: "",
+  emergencyContact: "",
   password: "",
   confirmPassword: "",
 };
@@ -38,6 +46,9 @@ function validate(f: Fields): Errors {
     e.email = "A valid email is required";
   if (f.phone.trim() && !/^\+?[0-9 ]{6,20}$/.test(f.phone.trim()))
     e.phone = "Phone number is not valid";
+  if (f.notes.trim().length > NOTES_MAX) e.notes = "Notes are too long";
+  if (f.emergencyContact.trim().length > EMERGENCY_CONTACT_MAX)
+    e.emergencyContact = "Emergency contact information is too long";
   if (f.password.length < 8 || f.password.length > 128)
     e.password = "Password must be 8-128 characters long";
   if (f.confirmPassword !== f.password)
@@ -68,6 +79,8 @@ export default function SignupPage() {
         surname: form.surname.trim(),
         email: form.email.trim(),
         phone: form.phone.trim() || undefined,
+        notes: form.notes.trim() || undefined,
+        emergency_contact: form.emergencyContact.trim() || undefined,
         password: form.password,
       });
       toast.success("Your account has been created.", {title: "Welcome!"});
@@ -129,6 +142,24 @@ export default function SignupPage() {
           value={form.phone}
           onChange={handleChange}
           error={errors.phone}
+        />
+        <TextField
+          label="Emergency Contact (optional)"
+          name="emergencyContact"
+          placeholder="e.g. Anna Rossi, +39 333 123 4567"
+          maxLength={EMERGENCY_CONTACT_MAX}
+          value={form.emergencyContact}
+          onChange={handleChange}
+          error={errors.emergencyContact}
+        />
+        <TextField
+          label="Notes (optional)"
+          name="notes"
+          placeholder="e.g. registered mountain guide"
+          maxLength={NOTES_MAX}
+          value={form.notes}
+          onChange={handleChange}
+          error={errors.notes}
         />
         <TextField
           label="Password"

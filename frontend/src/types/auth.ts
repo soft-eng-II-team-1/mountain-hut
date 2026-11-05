@@ -15,5 +15,8 @@ export type SignupData = {
   surname: string;
   email: string;
   phone?: string;
+  // optional info given at sign up (e.g. "registered mountain guide")
+  notes?: string;
+  emergency_contact?: string;
   password: string;
 };
