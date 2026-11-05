@@ -38,7 +38,7 @@ export default function userDAO() {
     //create user function
     //default role is hiker, but can be set to employee if needed
     //returns null if user already exists, otherwise returns the created user
-    this.createUser = async({name, surname, email, phone, password, role = 'hiker'}) => {
+    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker'}) => {
         const salt = crypto.randomBytes(16).toString('hex');
 
         const hash = await new Promise((resolve, reject) => {
@@ -57,6 +57,8 @@ export default function userDAO() {
                     surname,
                     email,
                     phone: phone || null,
+                    notes: notes || null,
+                    emergency_contact: emergency_contact || null,
                     hash,
                     salt
                 }
