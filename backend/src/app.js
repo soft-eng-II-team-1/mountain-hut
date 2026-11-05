@@ -76,11 +76,6 @@ app.use('/api/tables', tableRoutes);
 // Mounts router.get('/slots/:slotId/availability') and post('/slots/:slotId/reservations') at /api/slots/...
 app.use('/api', reservationRoutes);
 
-// Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok', message: 'Mountain Hut API is running' });
-});
-
 // Test email endpoint (useful to verify your email task works!)
 app.post('/api/test/email', async (req, res) => {
   try {
