@@ -7,8 +7,10 @@ const email = `hiker.${stamp}@test.it`;
 const roleAttemptEmail = `role.${stamp}@test.it`;
 const password = 'password123';
 
+const extraEmail = `extra.${stamp}@test.it`;
+
 afterAll(async () => {
-    await prisma.user.deleteMany({ where: { email: { in: [email, roleAttemptEmail] } } });
+    await prisma.user.deleteMany({ where: { email: { in: [email, roleAttemptEmail, extraEmail] } } });
     await prisma.$disconnect();
 });
 
@@ -65,4 +67,24 @@ describe('POST /api/auth/signup', () => {
             .send({ name: 'Anna', surname: 'Bianchi', email: `short.${stamp}@test.it`, password: '123' })
             .expect(422);
     });
+
+    it('saves notes and emergency contact', async () => {
+        await request(app)
+            .post('/api/auth/signup')
+            .send({ name: 'Anna', surname: 'Bianchi', email: extraEmail, password,
+                    notes: 'Registered mountain guide', emergency_contact: 'Marco +39333111222' })
+            .expect(201);
+
+        const saved = await prisma.user.findUnique({ where: { email: extraEmail } });
+        expect(saved.notes).toBe('Registered mountain guide');
+        expect(saved.emergency_contact).toBe('Marco +39333111222');
+    });
+
+    it('responds 422 if notes are too long', async () => {
+        await request(app)
+            .post('/api/auth/signup')
+            .send({ name: 'Anna', surname: 'Bianchi', email: `long.${stamp}@test.it`, password, notes: 'a'.repeat(300) })
+            .expect(422);
+    });
+
 });

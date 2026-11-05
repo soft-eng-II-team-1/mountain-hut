@@ -66,6 +66,8 @@ model user {
   name        String
   surname     String
   phone       String?
+  notes       String?
+  emergency_contact       String?
   email       String        @unique
   hash        String
   salt        String
