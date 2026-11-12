@@ -1,4 +1,7 @@
+FIGMA PROJECT:
 https://www.figma.com/design/SFshz7o0dbVCVh9fWAdVhy/CLOUDCREST---MOUNTAIN-HUT?node-id=0-1&p=f&t=8i6wOJJ5polpUOEB-0
+
+SPRINT 1:
 Done:
 - Homepage structure
 - Homepage content
@@ -7,3 +10,10 @@ Done:
 - Book a table - user side
 - Table Management
 - Time Slot Management
+
+SPRINT 2: 
+Done: 
+- Change password: generic option for the user, if he wants to change the pw
+- Forgot Password & Recovery code
+- Login page updated: added 'forgot password' and removed useless 'hut staff' discalimer
+- Update password: for an account created by the employee, first access
