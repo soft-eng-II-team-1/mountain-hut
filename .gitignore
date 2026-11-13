@@ -25,4 +25,4 @@ build/
 # HTTP Requests
 *.http
 
-coverage/
+coverage/AGENTS.md
