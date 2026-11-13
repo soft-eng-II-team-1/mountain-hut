@@ -9,6 +9,14 @@ const MAX_BOOKING_ATTEMPTS = 3;
 class ReservationDAO {
     // `db` can be a transaction client, so the check sees the same snapshot used to save
     static async checkAvailability(slotId, partySize, db = prisma) {
+        const slot = await db.slot.findUnique({
+            where: { slot_id: slotId },
+            select: { slot_id: true, date_time_start: true, date_time_end: true }
+        });
+        if (!slot) {
+            throw new Error("Slot not found");
+        }
+
         // 1. Fetch all tables assigned to this specific slot
         const slotTables = await db.slot_table.findMany({
             where: { slot_id: slotId },
@@ -49,13 +57,18 @@ class ReservationDAO {
         //    Since a party can be split over any number of tables, this is also
         //    enough to guarantee that assignTables() finds an assignment.
         if (totalAvailableSeats < partySize) {
-            return { available: false, totalAvailableSeats, availableTables: [] };
+            return { available: false, slot, totalAvailableSeats, availableTables: [], suggestedTables: [] };
         }
+
+        // Preview the same seating rules used for booking, without reserving any seats.
+        const suggestedTables = assignTables(availableTables, partySize);
 
         return {
             available: true,
+            slot,
             totalAvailableSeats,
-            availableTables
+            availableTables,
+            suggestedTables
         };
     }
 

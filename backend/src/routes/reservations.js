@@ -4,7 +4,7 @@ import {body, param, query } from 'express-validator';
 import ReservationDAO from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
-import { isLoggedIn, isHiker } from '../middlewares/auth.js';
+import { isHiker } from '../middlewares/auth.js';
 
 const router = Router();
 
@@ -35,7 +35,8 @@ const getOwnReservation = async (req) => {
     return details;
 };
 
-router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
+// MH-04: checking availability is public; booking still requires a hiker account.
+router.get('/slots/:slotId/availability', async (req, res) => {
     try {
         const { slotId } = req.params;
         const partySize = Number(req.query.partySize);
@@ -56,7 +57,7 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
 
         res.status(200).json(availability);
     } catch (error) {
-        if (error.message === "No tables are assigned to this slot yet.") {
+        if (error.message === "Slot not found" || error.message === "No tables are assigned to this slot yet.") {
             return res.status(404).json({ error: error.message });
         }
         res.status(500).json({ error: error.message });
