@@ -1,10 +1,26 @@
 import { prisma } from '../../prisma.client.ts';
 import crypto from 'crypto';
 import { assignTables } from '../services/tableAssignment.js';
-import { isSerializationConflict } from './transaction.js';
+import { isSerializationConflict, runSerializable } from './transaction.js';
 
 // How many times a booking is retried when it collides with a concurrent one on the same slot
 const MAX_BOOKING_ATTEMPTS = 3;
+
+//error with a code that the routes translates into an HTTP status 
+export class ReservationError extends Error {
+    constructor(code, message) {
+        super(message);
+        this.code = code;
+    }   
+}
+
+// MH-06 : a reservation can be changed only up to 48h before its current slot starts
+const MODIFICATION_CUTOFF_MS = 48 * 60 * 60 * 1000; // 48 hours in milliseconds
+
+// a slot can be booked only up to 2 hours before it starts (valid also when moving a reservation)
+const BOOKING_CUTOFF_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
+
+const concurrentBooking = () => new ReservationError('CONCURRENT_UPDATE', 'The slot is being booked by other hikers, please try again');
 
 class ReservationDAO {
     // `db` can be a transaction client, so the check sees the same snapshot used to save
@@ -144,6 +160,155 @@ class ReservationDAO {
             ...newReservation,
             tables: tableAssignments
         };
+    }
+
+    //change slot, partySize and requirements of a reservation
+    //booking reference doesn't change, table are reassigned when strictly necessary
+    //returns { changed : false} if nothing changed
+    static async updateReservation(reservationId, userId, {slotId, people, requirements}) {
+        return runSerializable(async (tx) => {
+            //Hiker's reservation
+            const reservation = await tx.reservation.findFirst({
+                where: { reservation_id: reservationId, user_id: userId },
+                include: { slot: true, reservation_table: true }
+            });
+            if(!reservation) {
+                throw new ReservationError('NOT_FOUND', 'Reservation not found');
+            }
+
+            //48h rule on the current slot
+            if(reservation.slot.date_time_start.getTime() - Date.now() < MODIFICATION_CUTOFF_MS) {
+                throw new ReservationError('TOO_LATE', 'Reservation can be changed only up to 48h before the slot starts');    
+            }
+
+            //if the request doesn't change anything it does nothing 
+            const slotChanged = slotId !== reservation.slot_id;
+            const peopleChanged = people !== reservation.people;
+            const requirementsChanged = requirements !== reservation.requirements;
+            if(!slotChanged && !peopleChanged && !requirementsChanged) {
+                return { changed: false };
+            }
+
+            //tables assignment is modified only if the slot or the party size changes
+            if(slotChanged) {
+                await this.moveToSlot(tx, reservation, slotId, people);
+            } else if(people < reservation.people) {
+                await this.shrinkParty(tx, reservation.reservation_table, reservation.people - people);
+            } else if(people > reservation.people) {
+                await this.growParty(tx, reservation, people);
+            }
+
+            //reservation_id stays the same
+            await tx.reservation.update({
+                where: { reservation_id: reservationId },
+                data: {slot_id: slotId, people, requirements}
+            });
+
+            return {changed: true};
+        }, concurrentBooking);
+    }
+
+    //Change booking --> moves the reservation to another slot: tables are assigned from scratch
+    static async moveToSlot(tx, reservation, slotId, people) {
+        const newSlot = await tx.slot.findUnique({where: {slot_id: slotId}});
+        if(!newSlot) {
+            throw new ReservationError('SLOT_NOT_FOUND', 'Slot not found');
+        }
+
+        if(newSlot.date_time_start.getTime() - Date.now() < BOOKING_CUTOFF_MS) {
+            throw new ReservationError('TOO_LATE', 'Reservations must be made at least 2 hours before the slot starts');
+        }
+
+        //only one booking per time slot rule
+        const otherBooking = await tx.reservation.findFirst({
+            where: {slot_id: slotId,
+                    user_id: reservation.user_id,
+                    reservation_id: {not: reservation.reservation_id}
+            }
+        });
+        if(otherBooking) {
+            throw new ReservationError('ALREADY_BOOKED', 'You already have a reservation for this time slot');
+        }
+
+        await tx.reservation_table.deleteMany({where: {reservation_id: reservation.reservation_id}});
+        await this.assignAndSaveTables(tx, reservation.reservation_id, slotId, people);
+    }
+
+    //Change booking --> smaller party in the same slot
+    //keep the tables and removes occupied seats starting from the table with the least seats of that party 
+    //a table left with 0 seats is released
+    static async shrinkParty(tx, rows, seatsToRemove) {
+        const ordered = [...rows].sort((a, b) => a.seats_reserved - b.seats_reserved);
+        for(const row of ordered) {
+            if(seatsToRemove === 0) break;
+            const removed = Math.min(row.seats_reserved, seatsToRemove);
+            seatsToRemove -= removed;
+            if(removed === row.seats_reserved) {
+                await tx.reservation_table.delete({where: {id: row.id}});
+            } else {
+                await tx.reservation_table.update({
+                    where: {id: row.id},
+                    data: {seats_reserved: row.seats_reserved - removed}
+                });
+            }
+        }
+    }
+
+    //Change booking --> bigger party in the same slot
+    //uses free seats of the party's table first, if not enough free, whole party is reassigned
+    static async growParty(tx, reservation, people) {
+        const extraSeats = people - reservation.people;
+
+        //if there aren't enough free seats for the extra people, the party cannot be seated
+        const availability = await this.checkAvailability(reservation.slot_id, extraSeats, tx);
+        if(!availability.available) {
+            throw new ReservationError('INSUFFICIENT_SEATS', 'Insufficient seats available for this party size');
+        }   
+
+        const ownRows = new Map(reservation.reservation_table.map(rt => [rt.table_id, rt]));
+        const ownFreeTables = availability.availableTables
+            .filter(t => ownRows.has(t.table_id))
+            .sort((a, b) => b.remainingSeats - a.remainingSeats);
+        const freeOnOwnTables = ownFreeTables.reduce((sum, t) => sum + t.remainingSeats, 0);
+
+        if(freeOnOwnTables >= extraSeats) {
+            //enough free seats on the party's tables, assign them first
+            let left = extraSeats;
+            for(const table of ownFreeTables) {
+                if(left === 0) break;
+                const row = ownRows.get(table.table_id);
+                const added = Math.min(left, table.remainingSeats);
+                await tx.reservation_table.update({
+                    where: {id: row.id},
+                    data: {seats_reserved: row.seats_reserved + added}
+                });
+                left -= added;
+            }
+            return;
+        }
+
+        //not enough free seats on the party's tables, reassign the whole party
+        await tx.reservation_table.deleteMany({where: {reservation_id: reservation.reservation_id}});
+        await this.assignAndSaveTables(tx, reservation.reservation_id, reservation.slot_id, people);
+    }
+
+    //assign tables with the book a table logic and saves them
+    //must be called inside a transaction
+    static async assignAndSaveTables(tx, reservationId, slotId, people) {
+        const availability = await this.checkAvailability(slotId, people, tx);
+        const assignments = availability.available && assignTables(availability.availableTables, people);
+        if(!assignments) {
+            throw new ReservationError('INSUFFICIENT_SEATS', 'Insufficient seats available for this party size');
+        }
+
+        await tx.reservation_table.createMany({
+            data: assignments.map(a => ({
+                id: crypto.randomUUID(),
+                reservation_id: reservationId,
+                table_id: a.table_id,
+                seats_reserved: a.seats_reserved
+            }))
+        });
     }
 
     // Details shown in the booking confirmation (MH-03): reservation, slot, hiker and tables.

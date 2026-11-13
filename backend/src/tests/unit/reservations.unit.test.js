@@ -15,7 +15,8 @@ const confirmationMock = {
     buildConfirmationEmail: jest.fn(),
 };
 
-jest.unstable_mockModule('../../dao/ReservationDAO.js', () => ({ default: reservationDaoMock }));
+class ReservationError extends Error { constructor(code, message) { super(message); this.code = code; } }
+jest.unstable_mockModule('../../dao/ReservationDAO.js', () => ({ default: reservationDaoMock, ReservationError }));
 jest.unstable_mockModule('../../services/reservationConfirmation.js', () => confirmationMock);
 
 const { default: reservationRoutes } = await import('../../routes/reservations.js');
@@ -283,7 +284,7 @@ describe('POST /api/slots/:slotId/reservations - confirmation email (MH-03)', ()
 
         expect(reservationDaoMock.getReservationDetails).toHaveBeenCalledWith(RESERVATION_ID);
         expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledTimes(1);
-        expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledWith(details());
+        expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledWith(details(), 'created');
     });
 
     it('still responds 201 with confirmation_sent: false if the email cannot be sent', async () => {

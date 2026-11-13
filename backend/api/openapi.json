@@ -768,7 +768,41 @@
         },
         "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables."
       }
+    },
+    "/api/reservations/{reservation_id}": {
+      "parameters": [
+        { "name": "reservation_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "Details of a reservation of the logged hiker",
+        "description": "Only the hiker who made the reservation.",
+        "responses": {
+          "200": { "description": "Reservation details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationDetails" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Reservation not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "put": {
+        "summary": "Change a reservation (slot, party size, requirements)",
+        "description": "Only the hiker who made the reservation. Allowed up to 48 hours before the current slot starts; the new slot must start at least 2 hours from now (same rule as booking). The booking reference does not change. Tables are kept whenever possible; they are reassigned only when the slot changes or the party grows beyond the free seats of its current tables. A confirmation email is sent only if something changed.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationUpdateInput" } } }
+        },
+        "responses": {
+          "200": { "description": "Reservation updated (or unchanged, see 'changed')", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationUpdateResult" } } } },
+          "400": { "description": "Less than 48 hours before the current slot, new slot starting in less than 2 hours, insufficient seats, or no tables assigned to the new slot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Reservation or slot not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "The hiker already has a reservation for the new slot, or the slot was being booked concurrently (retry)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      }
     }
+
   },
   "components": {
     "schemas": {
@@ -1072,7 +1106,65 @@
             "example": 10
           }
         }
+      },
+      "ReservationUpdateInput": {
+        "type": "object",
+        "required": ["slot_id", "people", "requirements"],
+        "properties": {
+          "slot_id": { "type": "string", "format": "uuid" },
+          "people": { "type": "integer", "minimum": 1, "example": 4 },
+          "requirements": { "type": "string", "nullable": true, "maxLength": 500, "example": "One vegetarian" }
+        }
+      },
+      "ReservationDetails": {
+        "type": "object",
+        "properties": {
+          "reservation_id": { "type": "string", "format": "uuid" },
+          "people": { "type": "integer" },
+          "requirements": { "type": "string", "nullable": true },
+          "slot": {
+            "type": "object",
+            "properties": {
+              "slot_id": { "type": "string", "format": "uuid" },
+              "date_time_start": { "type": "string", "format": "date-time" },
+              "date_time_end": { "type": "string", "format": "date-time" }
+            }
+          },
+          "hiker": {
+            "type": "object",
+            "properties": {
+              "user_id": { "type": "string", "format": "uuid" },
+              "name": { "type": "string" },
+              "surname": { "type": "string" },
+              "email": { "type": "string", "format": "email" }
+            }
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "table_id": { "type": "string", "format": "uuid" },
+                "number": { "type": "string", "example": "T2" },
+                "seats_reserved": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+      "ReservationUpdateResult": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ReservationDetails" },
+          {
+            "type": "object",
+            "properties": {
+              "changed": { "type": "boolean", "description": "false if the request did not change anything (no email sent)" },
+              "confirmation_sent": { "type": "boolean" }
+            }
+          }
+        ]
       }
+
     },
     "responses": {
       "Unauthorized": {
