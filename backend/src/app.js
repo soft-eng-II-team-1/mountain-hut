@@ -13,6 +13,7 @@ import { sendEmail } from './config/mailer.js';
 
 import wardenRoutes from './routes/warden.js';
 import slotRoutes from './routes/slots.js';
+import hikerRoutes from './routes/hikers.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
@@ -95,6 +96,8 @@ app.post('/api/test/email', async (req, res) => {
 app.use('/api/warden', wardenRoutes);
 
 app.use('/api/slots', slotRoutes);
+
+app.use('/api/hikers', hikerRoutes);
 
 //error handler 
 app.use((err, req, res, next) => {

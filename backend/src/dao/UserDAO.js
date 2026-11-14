@@ -37,8 +37,9 @@ export default function userDAO() {
 
     //create user function
     //default role is hiker, but can be set to employee if needed
+    //first_login = true forces the user to change the password at the next login (accounts created by the staff, MH-07)
     //returns null if user already exists, otherwise returns the created user
-    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker'}) => {
+    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker', first_login = false}) => {
         const salt = crypto.randomBytes(16).toString('hex');
 
         const hash = await new Promise((resolve, reject) => {
@@ -60,7 +61,8 @@ export default function userDAO() {
                     notes: notes || null,
                     emergency_contact: emergency_contact || null,
                     hash,
-                    salt
+                    salt,
+                    first_login
                 }
             });
             return { user_id: user.user_id, email: user.email, role: user.role };
