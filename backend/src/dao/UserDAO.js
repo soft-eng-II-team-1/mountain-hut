@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 
 import { prisma } from '../../prisma.client.ts'
 
+// MH-07: maximum number of hikers returned by a search (the employee should refine the search beyond this)
+const MAX_HIKER_SEARCH_RESULTS = 20;
+
 export default function userDAO() {
     this.getUser = (email, password) => {
         return new Promise(async (resolve, reject) => {
@@ -70,5 +73,48 @@ export default function userDAO() {
             }
             throw error;
         }
+    }
+
+    //MH-07: search the hikers already registered, so that an employee can reserve on their behalf
+    //the given criteria (at least one, checked by the route) are combined in AND:
+    // - email: exact match, case-insensitive (email is unique, so at most one hiker)
+    // - name: every word must be contained in the name or in the surname ("Mario Rossi", "rossi mario", "ross")
+    // - phone: partial match on the number without spaces ("333 123" matches "+39 3331234567")
+    //returns the hikers ordered by surname and name, at most MAX_HIKER_SEARCH_RESULTS
+    this.searchHikers = async ({ email, name, phone }) => {
+        const conditions = [{ role: 'hiker' }];
+
+        if (email) {
+            conditions.push({ email: { equals: email, mode: 'insensitive' } });
+        }
+
+        if (name) {
+            const words = name.split(/\s+/).filter(Boolean);
+            for (const word of words) {
+                conditions.push({
+                    OR: [
+                        { name: { contains: word, mode: 'insensitive' } },
+                        { surname: { contains: word, mode: 'insensitive' } },
+                    ]
+                });
+            }
+        }
+
+        if (phone) {
+            //phone numbers can be saved with spaces: they are ignored on both sides
+            //the route allows only digits and '+', so the pattern contains no LIKE wildcards
+            const pattern = `%${phone.replace(/\s+/g, '')}%`;
+            const rows = await prisma.$queryRaw`
+                SELECT user_id FROM "user"
+                WHERE role = 'hiker' AND REPLACE(phone, ' ', '') LIKE ${pattern}`;
+            conditions.push({ user_id: { in: rows.map((row) => row.user_id) } });
+        }
+
+        return prisma.user.findMany({
+            where: { AND: conditions },
+            select: { user_id: true, name: true, surname: true, email: true, phone: true },
+            orderBy: [{ surname: 'asc' }, { name: 'asc' }],
+            take: MAX_HIKER_SEARCH_RESULTS,
+        });
     }
 }
