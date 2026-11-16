@@ -27,7 +27,7 @@ const fieldClass =
 const labelClass = "flex flex-col gap-1 text-sm text-[#23404d]";
 
 const stepClass =
-  "flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-[#f1f1f1] text-lg text-[#23404d] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-[2.375rem] w-10 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-[#f1f1f1] text-lg text-[#23404d] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function BookTablePage() {
   const [date, setDate] = useState(() => toInputDate(new Date()));

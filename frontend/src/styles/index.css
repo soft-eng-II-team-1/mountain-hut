@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* toast notifications (components/popup) */
 @theme {
   --animate-toast-in: toast-in 0.25s ease-out;
   --animate-toast-out: toast-out 0.2s ease-in forwards;
@@ -28,4 +27,8 @@ html, body, #root {
   background-color: #f9fafb;
   width: 100%;
   height: 100%;
+}
+
+html {
+  font-size: clamp(16px, 0.85vw, 32px);
 }

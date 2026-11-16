@@ -56,7 +56,7 @@ export default function AdminLayout() {
         >
           <img src={logo} alt="Logo" className="h-14 w-14" />
           <p className="text-sm font-semibold tracking-wide">FOND DES FOURS</p>
-          <p className="text-[10px] font-medium tracking-wide">MOUNTAIN HUT</p>
+          <p className="text-[0.625rem] font-medium tracking-wide">MOUNTAIN HUT</p>
         </Link>
 
         <p className="px-4 pb-2 text-sm text-white/60">Dashboard</p>
