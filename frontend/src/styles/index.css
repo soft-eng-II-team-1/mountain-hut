@@ -30,5 +30,11 @@ html, body, #root {
 }
 
 html {
-  font-size: clamp(16px, 0.85vw, 32px);
+  font-size: 16px;
+}
+
+@media (min-width: 1024px) {
+  html {
+    font-size: clamp(18px, 0.85vw, 32px);
+  }
 }
