@@ -768,6 +768,142 @@
         },
         "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables."
       }
+    },
+    "/api/reservations/{reservationId}/requirements": {
+      "put": {
+        "summary": "Replace party requirements (MH-05)",
+        "description": "Only the logged-in hiker who owns the reservation can update it. Replaces the complete requirement list without changing the party size, slot or tables. An empty list clears all requirements and sets has_allergies to false. Missing or null requirements are rejected with 422 and leave existing data unchanged. The booking-level has_allergies flag is true when any entry has allergies set to true.",
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservationRequirementsInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Party requirements replaced successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationRequirements"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Reservation not found or not owned by the logged-in hiker",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Reservation not found"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid reservation UUID, missing or non-array requirements, non-object entry, non-boolean allergies, or a description that is not a string or has fewer than 1 or more than 500 characters after trimming. No changes are saved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected error while reading or updating the reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reservations/{reservationId}": {
+      "get": {
+        "summary": "Get own reservation details, including party requirements",
+        "description": "Only the logged-in hiker who owns the reservation can read it. Requirements are returned as a list with an allergies flag and description per entry.",
+        "parameters": [
+          {
+            "name": "reservationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Reservation not found or not owned by the logged-in hiker",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          },
+          "500": {
+            "description": "Unexpected error while reading the reservation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -881,6 +1017,136 @@
           }
         }
       },
+      "PartyRequirement": {
+        "type": "object",
+        "required": [
+          "allergies",
+          "description"
+        ],
+        "properties": {
+          "allergies": {
+            "type": "boolean",
+            "description": "Explicitly indicates that special care is needed during meal preparation.",
+            "example": true
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Trimmed before validation and storage. Must not be blank. Describes the affected subset of the party and its requirements.",
+            "example": "1 vegan, peanut allergy"
+          }
+        }
+      },
+      "ReservationRequirementsInput": {
+        "type": "object",
+        "required": [
+          "requirements"
+        ],
+        "properties": {
+          "requirements": {
+            "type": "array",
+            "description": "Replaces the entire stored list. An empty list clears it. Omission and null are invalid.",
+            "items": {
+              "$ref": "#/components/schemas/PartyRequirement"
+            },
+            "example": [
+              {
+                "allergies": true,
+                "description": "1 vegan, peanut allergy"
+              },
+              {
+                "allergies": true,
+                "description": "1 shellfish allergy"
+              },
+              {
+                "allergies": false,
+                "description": "2 vegetarians"
+              }
+            ]
+          }
+        }
+      },
+      "ReservationRequirements": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReservationRequirementsInput"
+          },
+          {
+            "type": "object",
+            "required": [
+              "reservation_id",
+              "has_allergies"
+            ],
+            "properties": {
+              "reservation_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "has_allergies": {
+                "type": "boolean",
+                "description": "True when any requirement has allergies set to true; false for an empty list.",
+                "example": true
+              }
+            }
+          }
+        ]
+      },
+      "ReservationDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReservationRequirements"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "people": {
+                "type": "integer",
+                "example": 4
+              },
+              "slot": {
+                "type": "object",
+                "properties": {
+                  "slot_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "date_time_start": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "date_time_end": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              "hiker": {
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "surname": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email"
+                  }
+                }
+              },
+              "tables": {
+                "$ref": "#/components/schemas/Reservation/properties/tables"
+              }
+            }
+          }
+        ]
+      },
       "ReservationInput": {
         "type": "object",
         "required": [
@@ -890,6 +1156,13 @@
           "people": {
             "type": "integer",
             "example": 4
+          },
+          "requirements": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 500,
+            "description": "Optional single description accepted at booking time. Use the reservation requirements update endpoint to submit a list with individual allergy flags.",
+            "example": "2 vegetarians"
           }
         }
       },
@@ -930,6 +1203,16 @@
                 }
               }
             }
+          },
+          "requirements": {
+            "type": "string",
+            "nullable": true,
+            "description": "The booking response retains the submitted description as trimmed text, or null. Reservation details and the requirements update endpoint return a list instead."
+          },
+          "has_allergies": {
+            "type": "boolean",
+            "description": "Booking-level allergy flag. Individual allergy flags are provided through the requirements update endpoint.",
+            "example": false
           }
         }
       },

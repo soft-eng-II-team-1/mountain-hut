@@ -12,6 +12,18 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 const MAX_REQUIREMENTS_LENGTH = 500;
 
+const requirementRules = [
+    param('reservationId').matches(UUID_REGEX).withMessage('reservationId must be a valid UUID'),
+    body('requirements').isArray().withMessage('requirements must be an array'),
+    body('requirements.*').custom(value => value !== null && typeof value === 'object' && !Array.isArray(value))
+        .withMessage('Each requirement must be an object'),
+    body('requirements.*.allergies').custom(value => typeof value === 'boolean')
+        .withMessage('allergies must be a boolean'),
+    body('requirements.*.description').isString().withMessage('description must be a text').bail()
+        .trim().isLength({ min: 1, max: MAX_REQUIREMENTS_LENGTH })
+        .withMessage(`description must be a nonempty text of at most ${MAX_REQUIREMENTS_LENGTH} characters`),
+];
+
 // Sends the booking confirmation (MH-03). Returns false instead of throwing when the
 // email cannot be sent: the reservation is already saved and must not fail because of it
 const sendConfirmation = async (reservationId) => {
@@ -29,7 +41,7 @@ const sendConfirmation = async (reservationId) => {
 // (in both cases the client gets a 404, so it cannot find out the reservations of others)
 const getOwnReservation = async (req) => {
     const details = await ReservationDAO.getReservationDetails(req.params.reservationId);
-    if (!details || details.hiker.user_id !== req.user.user_id) {
+    if (!details || details.hiker?.user_id !== req.user.user_id) {
         return null;
     }
     return details;
@@ -128,6 +140,31 @@ router.get('/reservations/:reservationId', isHiker, async (req, res) => {
         }
 
         res.status(200).json(details);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// PUT /api/reservations/:reservationId/requirements
+// Replaces the whole list; [] clears all requirements and the booking allergy flag.
+router.put('/reservations/:reservationId/requirements', isHiker, requirementRules, validateRequest, async (req, res) => {
+    try {
+        const details = await getOwnReservation(req);
+        if (!details) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+
+        const requirements = req.body.requirements.map(requirement => ({
+            allergies: requirement.allergies,
+            description: requirement.description
+        }));
+        const updated = await ReservationDAO.updateReservationRequirements(
+            req.params.reservationId, req.user.user_id, requirements
+        );
+        if (!updated) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+        res.status(200).json(updated);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

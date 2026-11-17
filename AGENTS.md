@@ -1,4 +1,5 @@
-## Coding Guidelines
+Mandatory Agent Instructions
+
 
 1. **Plan before editing:** Briefly explain the intended changes before modifying files. For trivial changes, a one-sentence explanation is sufficient.
 

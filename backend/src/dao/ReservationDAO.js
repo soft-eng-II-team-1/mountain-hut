@@ -138,7 +138,8 @@ class ReservationDAO {
             data: {
                 reservation_id: newReservationId,
                 people: people,
-                requirements: requirements,
+                // The booking endpoint still accepts a single optional description.
+                requirements: requirements ? [{ allergies: false, description: requirements }] : [],
                 slot_id: slotId,
                 user_id: userId
             }
@@ -155,8 +156,23 @@ class ReservationDAO {
 
         return {
             ...newReservation,
+            // Preserve the booking endpoint's existing text/null response.
+            requirements,
             tables: tableAssignments
         };
+    }
+
+    // Only requirements are updated; the party, slot and assigned tables stay the same.
+    static async updateReservationRequirements(reservationId, userId, requirements) {
+        const hasAllergies = requirements.some(requirement => requirement.allergies);
+        const updated = await prisma.reservation.updateMany({
+            where: { reservation_id: reservationId, user_id: userId },
+            data: { requirements, has_allergies: hasAllergies }
+        });
+        if (updated.count === 0) {
+            return null;
+        }
+        return { reservation_id: reservationId, requirements, has_allergies: hasAllergies };
     }
 
     // Details shown in the booking confirmation (MH-03): reservation, slot, hiker and tables.
@@ -177,7 +193,12 @@ class ReservationDAO {
         return {
             reservation_id: reservation.reservation_id,
             people: reservation.people,
-            requirements: reservation.requirements,
+            // The existing migration uses has_allergies for legacy entries.
+            requirements: reservation.requirements.map(requirement => ({
+                allergies: requirement.allergies ?? requirement.has_allergies,
+                description: requirement.description
+            })),
+            has_allergies: reservation.has_allergies,
             slot: {
                 slot_id: reservation.slot.slot_id,
                 date_time_start: reservation.slot.date_time_start,

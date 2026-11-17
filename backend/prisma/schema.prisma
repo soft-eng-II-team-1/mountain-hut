@@ -13,7 +13,7 @@ model reservation {
   reservation_id    String              @id @db.Uuid
   people            Int
   has_allergies     Boolean             @default(false)
-  requirements      String?
+  requirements      Json               @default("[]")
   slot_id           String              @db.Uuid
   user_id           String?             @db.Uuid
   temporary_name    String?
