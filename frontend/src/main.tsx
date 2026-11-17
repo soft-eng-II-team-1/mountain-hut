@@ -12,6 +12,7 @@ import AdminLayout from "./features/admin/components/AdminLayout";
 import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
 import BookTablePage from "./features/booking/pages/BookTablePage";
+import PartyRequirementsPage from "./features/booking/pages/PartyRequirementsPage";
 import {STAFF_ROLES} from "./types";
 
 const router = createBrowserRouter([
@@ -28,7 +29,14 @@ const router = createBrowserRouter([
           {
             // MH-01: only hikers can book
             element: <RequireRole roles={["hiker"]} />,
-            children: [{path: "book", element: <BookTablePage />}],
+            children: [
+              {path: "book", element: <BookTablePage />},
+              // MH-05: party requirements of the reservation just booked
+              {
+                path: "book/:reservationId/requirements",
+                element: <PartyRequirementsPage />,
+              },
+            ],
           },
         ],
       },

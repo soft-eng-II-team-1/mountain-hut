@@ -15,3 +15,11 @@ export type Reservation = {
   // tables the backend picked for the party (MH-01 table assignment)
   tables: {table_id: string; number: string; seats_reserved: number}[];
 };
+
+// MH-05: one dietary requirement of (a subset of) the party,
+// e.g. {allergy: true, description: "1 vegan, peanut allergy"}
+export type PartyRequirement = {
+  // the kitchen must take special care while preparing the meal
+  allergy: boolean;
+  description: string;
+};
