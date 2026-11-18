@@ -48,14 +48,14 @@ export default function RequirementRow({
         <label className="flex shrink-0 cursor-pointer items-center gap-1 text-sm text-black">
           <input
             type="checkbox"
-            checked={requirement.allergy}
+            checked={requirement.allergies}
             onChange={(e) =>
-              onChange({...requirement, allergy: e.target.checked})
+              onChange({...requirement, allergies: e.target.checked})
             }
             className="peer sr-only"
           />
           <img
-            src={requirement.allergy ? checkBoxIcon : checkBoxBlankIcon}
+            src={requirement.allergies ? checkBoxIcon : checkBoxBlankIcon}
             alt=""
             aria-hidden="true"
             className="h-8 w-8 rounded-sm peer-focus-visible:outline-2 peer-focus-visible:outline-[#24414f]"

@@ -17,9 +17,26 @@ export type Reservation = {
 };
 
 // MH-05: one dietary requirement of (a subset of) the party,
-// e.g. {allergy: true, description: "1 vegan, peanut allergy"}
+// e.g. {allergies: true, description: "1 vegan, peanut allergy"}
 export type PartyRequirement = {
   // the kitchen must take special care while preparing the meal
-  allergy: boolean;
+  allergies: boolean;
   description: string;
+};
+
+// GET /api/reservations/:reservationId (and each item of GET /api/reservations)
+export type ReservationDetails = {
+  reservation_id: string;
+  people: number;
+  requirements: PartyRequirement[];
+  has_allergies: boolean;
+  slot: {slot_id: string; date_time_start: string; date_time_end: string};
+  tables: {table_id: string; number: string; seats_reserved: number}[];
+};
+
+// PUT /api/reservations/:reservationId: the full new state of the booking
+export type ReservationUpdate = {
+  slot_id: string;
+  people: number;
+  requirements: PartyRequirement[];
 };

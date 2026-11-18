@@ -46,14 +46,14 @@ export default function PartyRequirementsPage() {
 
   const errorOf = (r: PartyRequirement) =>
     showErrors && !r.description.trim()
-      ? r.allergy
+      ? r.allergies
         ? "Describe the allergy so the hut can prepare a safe meal."
         : "Describe the requirement or remove it."
       : undefined;
 
   const addRequirement = () => {
     const key = nextKey.current++;
-    setRequirements((rs) => [...rs, {key, allergy: false, description: ""}]);
+    setRequirements((rs) => [...rs, {key, allergies: false, description: ""}]);
     setAddedKey(key);
   };
 
@@ -74,8 +74,8 @@ export default function PartyRequirementsPage() {
     try {
       await savePartyRequirements(
         reservation.reservation_id,
-        requirements.map(({allergy, description}) => ({
-          allergy,
+        requirements.map(({allergies, description}) => ({
+          allergies,
           description: description.trim(),
         })),
       );
