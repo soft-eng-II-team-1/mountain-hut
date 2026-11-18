@@ -8,11 +8,14 @@ import RequireRole from "./components/routing/RequireRole";
 import HomePage from "./features/home/pages/HomePage";
 import LoginPage from "./features/auth/pages/LoginPage";
 import SignupPage from "./features/auth/pages/SignupPage";
+import UpdatePasswordPage from "./features/auth/pages/UpdatePasswordPage";
+import ChangePasswordPage from "./features/auth/pages/ChangePasswordPage";
+import ForgotPasswordPage from "./features/auth/pages/ForgotPasswordPage";
 import AdminLayout from "./features/admin/components/AdminLayout";
 import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
 import BookTablePage from "./features/booking/pages/BookTablePage";
-import {STAFF_ROLES} from "./types";
+import {ALL_ROLES, STAFF_ROLES} from "./types";
 
 const router = createBrowserRouter([
   {
@@ -25,8 +28,15 @@ const router = createBrowserRouter([
           {index: true, element: <HomePage />},
           {path: "login", element: <LoginPage />},
           {path: "signup", element: <SignupPage />},
+          {path: "forgot-password", element: <ForgotPasswordPage />},
           {
-            // MH-01: only hikers can book
+            element: <RequireRole roles={ALL_ROLES} />,
+            children: [
+              {path: "update-password", element: <UpdatePasswordPage />},
+              {path: "change-password", element: <ChangePasswordPage />},
+            ],
+          },
+          {
             element: <RequireRole roles={["hiker"]} />,
             children: [{path: "book", element: <BookTablePage />}],
           },

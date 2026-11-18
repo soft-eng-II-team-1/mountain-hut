@@ -10,6 +10,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<User>;
   signup: (data: SignupData) => Promise<User>;
   logout: () => Promise<void>;
+  changePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
 };
 
 let initStarted = false;
@@ -42,6 +43,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
     const user = await authApi.signup(data);
     set({user});
     return user;
+  },
+
+  changePassword: async (newPassword, currentPassword) => {
+    const updated = await authApi.changePassword(newPassword, currentPassword);
+    // keep what we had if the backend answers without a body, the flag is cleared either way
+    set((s) => ({
+      user: updated ?? (s.user && {...s.user, first_login: false}),
+    }));
   },
 
   logout: async () => {
