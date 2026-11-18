@@ -9,6 +9,14 @@ const MAX_BOOKING_ATTEMPTS = 3;
 class ReservationDAO {
     // `db` can be a transaction client, so the check sees the same snapshot used to save
     static async checkAvailability(slotId, partySize, db = prisma) {
+        const slot = await db.slot.findUnique({
+            where: { slot_id: slotId },
+            select: { slot_id: true, date_time_start: true, date_time_end: true }
+        });
+        if (!slot) {
+            throw new Error("Slot not found");
+        }
+
         // 1. Fetch all tables assigned to this specific slot
         const slotTables = await db.slot_table.findMany({
             where: { slot_id: slotId },
@@ -49,25 +57,30 @@ class ReservationDAO {
         //    Since a party can be split over any number of tables, this is also
         //    enough to guarantee that assignTables() finds an assignment.
         if (totalAvailableSeats < partySize) {
-            return { available: false, totalAvailableSeats, availableTables: [] };
+            return { available: false, slot, totalAvailableSeats, availableTables: [], suggestedTables: [] };
         }
+
+        // Preview the same seating rules used for booking, without reserving any seats.
+        const suggestedTables = assignTables(availableTables, partySize);
 
         return {
             available: true,
+            slot,
             totalAvailableSeats,
-            availableTables
+            availableTables,
+            suggestedTables
         };
     }
 
     // `requirements` are the optional needs of the party (e.g. allergies), null if none
-    static async saveReservation(userId, slotId, people, requirements = null) {
+    static async saveReservation(userId, slotId, people, requirements = null, options = {}) {
         // Checks and inserts run in a SERIALIZABLE transaction: two hikers booking the
         // same slot at the same time cannot both read the same free seats (overbooking),
         // and the same hiker cannot create two reservations for the slot.
         for (let attempt = 1; ; attempt++) {
             try {
                 return await prisma.$transaction(
-                    tx => this.createReservation(tx, userId, slotId, people, requirements),
+                    tx => this.createReservation(tx, userId, slotId, people, requirements, options),
                     { isolationLevel: 'Serializable' }
                 );
             } catch (error) {
@@ -81,9 +94,18 @@ class ReservationDAO {
         }
     }
 
+    // MH-07: account lookup/creation happens separately; this method only books seats.
+    static async saveEmployeeReservation({ slotId, people, userId = null, temporaryName = null, temporaryPhone = null, requirements = null }) {
+        return this.saveReservation(userId, slotId, people, requirements, {
+            employeeBooking: true, temporaryName, temporaryPhone
+        });
+    }
+
     // Must be called inside a transaction (see saveReservation)
-    static async createReservation(tx, userId, slotId, people, requirements = null) {
-        // 1. Fetch slot to check the 2-hour cutoff rule
+    static async createReservation(tx, userId, slotId, people, requirements = null, options = {}) {
+        const { employeeBooking = false, temporaryName = null, temporaryPhone = null } = options;
+
+        // 1. Employees may book until the slot begins; web bookings retain their cutoff.
         const slot = await tx.slot.findUnique({
             where: { slot_id: slotId }
         });
@@ -93,16 +115,32 @@ class ReservationDAO {
 
         const now = new Date();
         const twoHoursInMs = 2 * 60 * 60 * 1000;
-        if (new Date(slot.date_time_start) - now < twoHoursInMs) {
+        if (employeeBooking && new Date(slot.date_time_start) <= now) {
+            throw new Error("Reservations must be made before the slot starts");
+        }
+        if (!employeeBooking && new Date(slot.date_time_start) - now < twoHoursInMs) {
             throw new Error("Reservations must be made at least 2 hours before the slot starts");
         }
 
+        if (employeeBooking && userId !== null) {
+            const hiker = await tx.user.findUnique({
+                where: { user_id: userId },
+                select: { role: true }
+            });
+            if (!hiker || hiker.role !== 'hiker') {
+                throw new Error("Hiker not found");
+            }
+        }
+
         // 2. Check the "only one booking per time slot" rule for this hiker
-        const existingBooking = await tx.reservation.findFirst({
-            where: { slot_id: slotId, user_id: userId }
-        });
-        if (existingBooking) {
-            throw new Error("You already have a reservation for this time slot");
+        // Temporary contacts have no shared user ID and must not match each other.
+        if (userId !== null) {
+            const existingBooking = await tx.reservation.findFirst({
+                where: { slot_id: slotId, user_id: userId }
+            });
+            if (existingBooking) {
+                throw new Error("You already have a reservation for this time slot");
+            }
         }
 
         // 3. Check total seat availability
@@ -121,13 +159,19 @@ class ReservationDAO {
         // 5. Save the reservation and its tables
         const newReservationId = crypto.randomUUID();
 
+        if (employeeBooking && new Date(slot.date_time_start) <= new Date()) {
+            throw new Error("Reservations must be made before the slot starts");
+        }
+
         const newReservation = await tx.reservation.create({
             data: {
                 reservation_id: newReservationId,
                 people: people,
-                requirements: requirements,
+                // The booking endpoint still accepts a single optional description.
+                requirements: requirements ? [{ allergies: false, description: requirements }] : [],
                 slot_id: slotId,
-                user_id: userId
+                user_id: userId,
+                ...(employeeBooking ? { temporary_name: temporaryName, temporary_phone: temporaryPhone } : {})
             }
         });
 
@@ -142,8 +186,23 @@ class ReservationDAO {
 
         return {
             ...newReservation,
+            // Preserve the booking endpoint's existing text/null response.
+            requirements,
             tables: tableAssignments
         };
+    }
+
+    // Only requirements are updated; the party, slot and assigned tables stay the same.
+    static async updateReservationRequirements(reservationId, userId, requirements) {
+        const hasAllergies = requirements.some(requirement => requirement.allergies);
+        const updated = await prisma.reservation.updateMany({
+            where: { reservation_id: reservationId, user_id: userId },
+            data: { requirements, has_allergies: hasAllergies }
+        });
+        if (updated.count === 0) {
+            return null;
+        }
+        return { reservation_id: reservationId, requirements, has_allergies: hasAllergies };
     }
 
     // Details shown in the booking confirmation (MH-03): reservation, slot, hiker and tables.
@@ -164,7 +223,12 @@ class ReservationDAO {
         return {
             reservation_id: reservation.reservation_id,
             people: reservation.people,
-            requirements: reservation.requirements,
+            // The existing migration uses has_allergies for legacy entries.
+            requirements: reservation.requirements.map(requirement => ({
+                allergies: requirement.allergies ?? requirement.has_allergies,
+                description: requirement.description
+            })),
+            has_allergies: reservation.has_allergies,
             slot: {
                 slot_id: reservation.slot.slot_id,
                 date_time_start: reservation.slot.date_time_start,

@@ -77,7 +77,7 @@ router.get('/', isStaff, listRules, validateRequest, async (req, res, next) => {
 
 // GET /api/slots/available?partySize=...&from=...&to=...
 // List of available slots for hikers to book
-router.get('/available', isLoggedIn, availableSlotsRules, validateRequest, async (req, res, next) => {
+router.get('/available', availableSlotsRules, validateRequest, async (req, res, next) => {
     try{
         const slots = await slotDao.getAvailableSlots({
             partySize: Number(req.query.partySize),

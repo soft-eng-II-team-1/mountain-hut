@@ -4,13 +4,25 @@ import {body, param, query } from 'express-validator';
 import ReservationDAO from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
-import { isLoggedIn, isHiker } from '../middlewares/auth.js';
+import { isHiker, isEmployee } from '../middlewares/auth.js';
 
 const router = Router();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MAX_REQUIREMENTS_LENGTH = 500;
+
+const requirementRules = [
+    param('reservationId').matches(UUID_REGEX).withMessage('reservationId must be a valid UUID'),
+    body('requirements').isArray().withMessage('requirements must be an array'),
+    body('requirements.*').custom(value => value !== null && typeof value === 'object' && !Array.isArray(value))
+        .withMessage('Each requirement must be an object'),
+    body('requirements.*.allergies').custom(value => typeof value === 'boolean')
+        .withMessage('allergies must be a boolean'),
+    body('requirements.*.description').isString().withMessage('description must be a text').bail()
+        .trim().isLength({ min: 1, max: MAX_REQUIREMENTS_LENGTH })
+        .withMessage(`description must be a nonempty text of at most ${MAX_REQUIREMENTS_LENGTH} characters`),
+];
 
 // Sends the booking confirmation (MH-03). Returns false instead of throwing when the
 // email cannot be sent: the reservation is already saved and must not fail because of it
@@ -29,13 +41,14 @@ const sendConfirmation = async (reservationId) => {
 // (in both cases the client gets a 404, so it cannot find out the reservations of others)
 const getOwnReservation = async (req) => {
     const details = await ReservationDAO.getReservationDetails(req.params.reservationId);
-    if (!details || details.hiker.user_id !== req.user.user_id) {
+    if (!details || details.hiker?.user_id !== req.user.user_id) {
         return null;
     }
     return details;
 };
 
-router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
+// MH-04: checking availability is public; booking still requires a hiker account.
+router.get('/slots/:slotId/availability', async (req, res) => {
     try {
         const { slotId } = req.params;
         const partySize = Number(req.query.partySize);
@@ -56,7 +69,7 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
 
         res.status(200).json(availability);
     } catch (error) {
-        if (error.message === "No tables are assigned to this slot yet.") {
+        if (error.message === "Slot not found" || error.message === "No tables are assigned to this slot yet.") {
             return res.status(404).json({ error: error.message });
         }
         res.status(500).json({ error: error.message });
@@ -113,6 +126,79 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
     }
 });
 
+// MH-07: book for a registered hiker or a temporary contact, without changing accounts.
+router.post('/slots/:slotId/reservations/for-hiker', isEmployee, async (req, res) => {
+    try {
+        const { slotId } = req.params;
+        const input = req.body ?? {};
+        const people = Number(input.people);
+        const userId = input.user_id ?? null;
+        let temporaryName = input.temporary_name ?? null;
+        let temporaryPhone = input.temporary_phone ?? null;
+
+        if (!UUID_REGEX.test(slotId)) {
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+        }
+        if (!['number', 'string'].includes(typeof input.people) || !Number.isSafeInteger(people) || people <= 0) {
+            return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
+        }
+
+        if (userId !== null) {
+            if (typeof userId !== 'string' || !UUID_REGEX.test(userId)) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'user_id must be a valid UUID' }] });
+            }
+            if (temporaryName !== null || temporaryPhone !== null) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'Provide either user_id or temporary contact details, not both' }] });
+            }
+        } else {
+            if (typeof temporaryName !== 'string' || !temporaryName.trim()) {
+                return res.status(422).json({ errors: [{ field: 'temporary_name', message: 'temporary_name is required when user_id is not provided' }] });
+            }
+            temporaryName = temporaryName.trim();
+            if (temporaryPhone !== null) {
+                if (typeof temporaryPhone !== 'string') {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+                temporaryPhone = temporaryPhone.trim() || null;
+                if (temporaryPhone !== null && !/^\+?[0-9 ]{6,20}$/.test(temporaryPhone)) {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+            }
+        }
+
+        let requirements = input.requirements ?? null;
+        if (requirements !== null) {
+            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
+                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
+            }
+            requirements = requirements.trim() || null;
+        }
+
+        const reservation = await ReservationDAO.saveEmployeeReservation({
+            slotId, people, userId, temporaryName, temporaryPhone, requirements
+        });
+        res.status(201).json(reservation);
+    } catch (error) {
+        if (error.message === "Slot not found" || error.message === "Hiker not found") {
+            return res.status(404).json({ error: error.message });
+        }
+        if (
+            error.message === "You already have a reservation for this time slot" ||
+            error.message === "The slot is being booked by other hikers, please try again"
+        ) {
+            return res.status(409).json({ error: error.message });
+        }
+        if (
+            error.message === "Insufficient seats available for this party size" ||
+            error.message === "Reservations must be made before the slot starts" ||
+            error.message === "No tables are assigned to this slot yet."
+        ) {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // GET /api/reservations/:reservationId
 // Details of the booking confirmation (MH-03), only for the hiker who made the reservation
 router.get('/reservations/:reservationId', isHiker, async (req, res) => {
@@ -127,6 +213,31 @@ router.get('/reservations/:reservationId', isHiker, async (req, res) => {
         }
 
         res.status(200).json(details);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// PUT /api/reservations/:reservationId/requirements
+// Replaces the whole list; [] clears all requirements and the booking allergy flag.
+router.put('/reservations/:reservationId/requirements', isHiker, requirementRules, validateRequest, async (req, res) => {
+    try {
+        const details = await getOwnReservation(req);
+        if (!details) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+
+        const requirements = req.body.requirements.map(requirement => ({
+            allergies: requirement.allergies,
+            description: requirement.description
+        }));
+        const updated = await ReservationDAO.updateReservationRequirements(
+            req.params.reservationId, req.user.user_id, requirements
+        );
+        if (!updated) {
+            return res.status(404).json({ error: "Reservation not found" });
+        }
+        res.status(200).json(updated);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
