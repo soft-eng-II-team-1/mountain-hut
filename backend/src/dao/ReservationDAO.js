@@ -73,14 +73,14 @@ class ReservationDAO {
     }
 
     // `requirements` are the optional needs of the party (e.g. allergies), null if none
-    static async saveReservation(userId, slotId, people, requirements = null) {
+    static async saveReservation(userId, slotId, people, requirements = null, options = {}) {
         // Checks and inserts run in a SERIALIZABLE transaction: two hikers booking the
         // same slot at the same time cannot both read the same free seats (overbooking),
         // and the same hiker cannot create two reservations for the slot.
         for (let attempt = 1; ; attempt++) {
             try {
                 return await prisma.$transaction(
-                    tx => this.createReservation(tx, userId, slotId, people, requirements),
+                    tx => this.createReservation(tx, userId, slotId, people, requirements, options),
                     { isolationLevel: 'Serializable' }
                 );
             } catch (error) {
@@ -94,9 +94,18 @@ class ReservationDAO {
         }
     }
 
+    // MH-07: account lookup/creation happens separately; this method only books seats.
+    static async saveEmployeeReservation({ slotId, people, userId = null, temporaryName = null, temporaryPhone = null, requirements = null }) {
+        return this.saveReservation(userId, slotId, people, requirements, {
+            employeeBooking: true, temporaryName, temporaryPhone
+        });
+    }
+
     // Must be called inside a transaction (see saveReservation)
-    static async createReservation(tx, userId, slotId, people, requirements = null) {
-        // 1. Fetch slot to check the 2-hour cutoff rule
+    static async createReservation(tx, userId, slotId, people, requirements = null, options = {}) {
+        const { employeeBooking = false, temporaryName = null, temporaryPhone = null } = options;
+
+        // 1. Employees may book until the slot begins; web bookings retain their cutoff.
         const slot = await tx.slot.findUnique({
             where: { slot_id: slotId }
         });
@@ -106,16 +115,32 @@ class ReservationDAO {
 
         const now = new Date();
         const twoHoursInMs = 2 * 60 * 60 * 1000;
-        if (new Date(slot.date_time_start) - now < twoHoursInMs) {
+        if (employeeBooking && new Date(slot.date_time_start) <= now) {
+            throw new Error("Reservations must be made before the slot starts");
+        }
+        if (!employeeBooking && new Date(slot.date_time_start) - now < twoHoursInMs) {
             throw new Error("Reservations must be made at least 2 hours before the slot starts");
         }
 
+        if (employeeBooking && userId !== null) {
+            const hiker = await tx.user.findUnique({
+                where: { user_id: userId },
+                select: { role: true }
+            });
+            if (!hiker || hiker.role !== 'hiker') {
+                throw new Error("Hiker not found");
+            }
+        }
+
         // 2. Check the "only one booking per time slot" rule for this hiker
-        const existingBooking = await tx.reservation.findFirst({
-            where: { slot_id: slotId, user_id: userId }
-        });
-        if (existingBooking) {
-            throw new Error("You already have a reservation for this time slot");
+        // Temporary contacts have no shared user ID and must not match each other.
+        if (userId !== null) {
+            const existingBooking = await tx.reservation.findFirst({
+                where: { slot_id: slotId, user_id: userId }
+            });
+            if (existingBooking) {
+                throw new Error("You already have a reservation for this time slot");
+            }
         }
 
         // 3. Check total seat availability
@@ -134,6 +159,10 @@ class ReservationDAO {
         // 5. Save the reservation and its tables
         const newReservationId = crypto.randomUUID();
 
+        if (employeeBooking && new Date(slot.date_time_start) <= new Date()) {
+            throw new Error("Reservations must be made before the slot starts");
+        }
+
         const newReservation = await tx.reservation.create({
             data: {
                 reservation_id: newReservationId,
@@ -141,7 +170,8 @@ class ReservationDAO {
                 // The booking endpoint still accepts a single optional description.
                 requirements: requirements ? [{ allergies: false, description: requirements }] : [],
                 slot_id: slotId,
-                user_id: userId
+                user_id: userId,
+                ...(employeeBooking ? { temporary_name: temporaryName, temporary_phone: temporaryPhone } : {})
             }
         });
 

@@ -4,7 +4,7 @@ import {body, param, query } from 'express-validator';
 import ReservationDAO from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
-import { isHiker } from '../middlewares/auth.js';
+import { isHiker, isEmployee } from '../middlewares/auth.js';
 
 const router = Router();
 
@@ -118,6 +118,79 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
         if (
             error.message === "Insufficient seats available for this party size" ||
             error.message === "Reservations must be made at least 2 hours before the slot starts" ||
+            error.message === "No tables are assigned to this slot yet."
+        ) {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// MH-07: book for a registered hiker or a temporary contact, without changing accounts.
+router.post('/slots/:slotId/reservations/for-hiker', isEmployee, async (req, res) => {
+    try {
+        const { slotId } = req.params;
+        const input = req.body ?? {};
+        const people = Number(input.people);
+        const userId = input.user_id ?? null;
+        let temporaryName = input.temporary_name ?? null;
+        let temporaryPhone = input.temporary_phone ?? null;
+
+        if (!UUID_REGEX.test(slotId)) {
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+        }
+        if (!['number', 'string'].includes(typeof input.people) || !Number.isSafeInteger(people) || people <= 0) {
+            return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
+        }
+
+        if (userId !== null) {
+            if (typeof userId !== 'string' || !UUID_REGEX.test(userId)) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'user_id must be a valid UUID' }] });
+            }
+            if (temporaryName !== null || temporaryPhone !== null) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'Provide either user_id or temporary contact details, not both' }] });
+            }
+        } else {
+            if (typeof temporaryName !== 'string' || !temporaryName.trim()) {
+                return res.status(422).json({ errors: [{ field: 'temporary_name', message: 'temporary_name is required when user_id is not provided' }] });
+            }
+            temporaryName = temporaryName.trim();
+            if (temporaryPhone !== null) {
+                if (typeof temporaryPhone !== 'string') {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+                temporaryPhone = temporaryPhone.trim() || null;
+                if (temporaryPhone !== null && !/^\+?[0-9 ]{6,20}$/.test(temporaryPhone)) {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+            }
+        }
+
+        let requirements = input.requirements ?? null;
+        if (requirements !== null) {
+            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
+                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
+            }
+            requirements = requirements.trim() || null;
+        }
+
+        const reservation = await ReservationDAO.saveEmployeeReservation({
+            slotId, people, userId, temporaryName, temporaryPhone, requirements
+        });
+        res.status(201).json(reservation);
+    } catch (error) {
+        if (error.message === "Slot not found" || error.message === "Hiker not found") {
+            return res.status(404).json({ error: error.message });
+        }
+        if (
+            error.message === "You already have a reservation for this time slot" ||
+            error.message === "The slot is being booked by other hikers, please try again"
+        ) {
+            return res.status(409).json({ error: error.message });
+        }
+        if (
+            error.message === "Insufficient seats available for this party size" ||
+            error.message === "Reservations must be made before the slot starts" ||
             error.message === "No tables are assigned to this slot yet."
         ) {
             return res.status(400).json({ error: error.message });
