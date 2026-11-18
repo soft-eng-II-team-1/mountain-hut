@@ -16,6 +16,7 @@ import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
 import BookTablePage from "./features/booking/pages/BookTablePage";
 import {ALL_ROLES, STAFF_ROLES} from "./types";
+import PartyRequirementsPage from "./features/booking/pages/PartyRequirementsPage";
 
 const router = createBrowserRouter([
   {
