@@ -42,11 +42,11 @@ const rows = (...list) => list.map(([number, seats_reserved]) => ({
 
 // Current slot: T1(4) T2(2) T3(6). New slot: T4(4) T5(6), empty, starting in 4 days.
 // The reservation starts in 3 days; `taken` are all the seats reserved in the current slot (own included)
-const setup = ({ people = 3, requirements = null, own = rows(['T1', 3]), taken = own, startsIn = 72 * HOUR } = {}) => {
+const setup = ({ people = 3, requirements = [], own = rows(['T1', 3]), taken = own, startsIn = 72 * HOUR } = {}) => {
     tx.reservation.findFirst.mockImplementation(async ({ where }) => (
         where.reservation_id === RES_ID
             ? {
-                reservation_id: RES_ID, user_id: USER_ID, slot_id: SLOT_ID, people, requirements,
+                reservation_id: RES_ID, user_id: USER_ID, slot_id: SLOT_ID, people, reservation_requirement: requirements,
                 slot: { date_time_start: new Date(Date.now() + startsIn) },
                 reservation_table: own,
             }
@@ -65,7 +65,7 @@ const setup = ({ people = 3, requirements = null, own = rows(['T1', 3]), taken =
 };
 
 const update = (changes) => ReservationDAO.updateReservation(RES_ID, USER_ID, {
-    slotId: SLOT_ID, people: 3, requirements: null, ...changes,
+    slotId: SLOT_ID, people: 3, requirements: [], ...changes,
 });
 
 // Tables saved with createMany, as { table: seats }
@@ -104,9 +104,9 @@ describe('ReservationDAO.updateReservation - checks on the current reservation',
     });
 
     it('returns changed: false and saves nothing if the request changes nothing', async () => {
-        setup({ requirements: 'Vegan' });
+        setup({ requirements: [{ allergies: false, description: 'Vegan' }] });
 
-        await expect(update({ requirements: 'Vegan' })).resolves.toEqual({ changed: false });
+        await expect(update({ requirements: [{ allergies: false, description: 'Vegan' }] })).resolves.toEqual({ changed: false });
         expectNothingSaved();
     });
 });
@@ -115,11 +115,14 @@ describe('ReservationDAO.updateReservation - same slot', () => {
     it('changes only the requirements and keeps the tables', async () => {
         setup();
 
-        await expect(update({ requirements: 'One vegetarian' })).resolves.toEqual({ changed: true });
+        await expect(update({ requirements: [{ allergies: false, description: 'One vegetarian' }] })).resolves.toEqual({ changed: true });
 
         expect(tx.reservation.update).toHaveBeenCalledWith({
             where: { reservation_id: RES_ID },
-            data: { slot_id: SLOT_ID, people: 3, requirements: 'One vegetarian' },
+            data: {
+                slot_id: SLOT_ID, people: 3, has_allergies: false,
+                reservation_requirement: { deleteMany: {}, create: [expect.objectContaining({ allergies: false, description: 'One vegetarian' })] },
+            },
         });
         expect(tx.reservation_table.update).not.toHaveBeenCalled();
         expect(tx.reservation_table.deleteMany).not.toHaveBeenCalled();
@@ -176,7 +179,7 @@ describe('ReservationDAO.updateReservation - new slot', () => {
         expect(createdTables()).toEqual({ T5: 6, T4: 2 });
         expect(tx.reservation.update).toHaveBeenCalledWith({
             where: { reservation_id: RES_ID },
-            data: { slot_id: NEW_SLOT_ID, people: 8, requirements: null },
+            data: { slot_id: NEW_SLOT_ID, people: 8, has_allergies: false, reservation_requirement: { deleteMany: {}, create: [] } },
         });
     });
 

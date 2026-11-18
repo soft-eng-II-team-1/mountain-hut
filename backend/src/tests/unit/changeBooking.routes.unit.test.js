@@ -34,7 +34,7 @@ const SLOT_ID = '11111111-1111-4111-8111-111111111111';
 const RESERVATION_ID = '44444444-4444-4444-8444-444444444444';
 const url = `/api/reservations/${RESERVATION_ID}`;
 
-const details = { reservation_id: RESERVATION_ID, people: 4, requirements: 'One vegetarian' };
+const details = { reservation_id: RESERVATION_ID, people: 4, requirements: [{ allergies: false, description: 'One vegetarian' }] };
 
 const put = (body, role = 'hiker') => request(app).put(url).set('x-test-role', role).send(body);
 
@@ -61,10 +61,10 @@ describe('PUT /api/reservations/:reservationId', () => {
     });
 
     it('changes the reservation of the logged hiker and sends the "modified" email', async () => {
-        const res = await put({ slot_id: SLOT_ID.toUpperCase(), people: '4', requirements: '  One vegetarian  ' }).expect(200);
+        const res = await put({ slot_id: SLOT_ID.toUpperCase(), people: '4', requirements: [{ allergies: false, description: '  One vegetarian  ' }] }).expect(200);
 
         expect(reservationDaoMock.updateReservation).toHaveBeenCalledWith(
-            RESERVATION_ID, USER_ID, { slotId: SLOT_ID, people: 4, requirements: 'One vegetarian' },
+            RESERVATION_ID, USER_ID, { slotId: SLOT_ID, people: 4, requirements: [{ allergies: false, description: 'One vegetarian' }] },
         );
         expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledWith(details, 'modified');
         expect(res.body).toEqual({ ...details, changed: true, confirmation_sent: true });
@@ -79,11 +79,11 @@ describe('PUT /api/reservations/:reservationId', () => {
         expect(confirmationMock.sendReservationConfirmation).not.toHaveBeenCalled();
     });
 
-    it('saves empty requirements as null', async () => {
-        await put({ slot_id: SLOT_ID, people: 4, requirements: '   ' }).expect(200);
+    it('saves null requirements as an empty list', async () => {
+        await put({ slot_id: SLOT_ID, people: 4, requirements: null }).expect(200);
 
         expect(reservationDaoMock.updateReservation).toHaveBeenCalledWith(
-            RESERVATION_ID, USER_ID, expect.objectContaining({ requirements: null }),
+            RESERVATION_ID, USER_ID, expect.objectContaining({ requirements: [] }),
         );
     });
 
@@ -97,7 +97,7 @@ describe('PUT /api/reservations/:reservationId', () => {
 
     it('responds 422 with all the invalid fields', async () => {
         const res = await request(app).put('/api/reservations/abc').set('x-test-role', 'hiker')
-            .send({ slot_id: 42, people: 0, requirements: 'x'.repeat(501) })
+            .send({ slot_id: 42, people: 0, requirements: [{ allergies: false, description: 'x'.repeat(501) }] })
             .expect(422);
 
         expect(res.body.errors.map((e) => e.field)).toEqual(['reservationId', 'slot_id', 'people', 'requirements']);

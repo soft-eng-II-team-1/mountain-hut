@@ -22,6 +22,15 @@ const BOOKING_CUTOFF_MS = 2 * 60 * 60 * 1000; // 2 hours in milliseconds
 
 const concurrentBooking = () => new ReservationError('CONCURRENT_UPDATE', 'The slot is being booked by other hikers, please try again');
 
+// rows of reservation_requirement for a list of { allergies, description }
+const toRequirementRows = (requirements) => requirements.map(r => ({
+    id: crypto.randomUUID(), allergies: r.allergies, description: r.description
+}));
+
+// same order used when reading: allergies first, so the kitchen sees them at the top
+const REQUIREMENTS_ORDER = [{ allergies: 'desc' }, { description: 'asc' }];
+
+
 class ReservationDAO {
     // `db` can be a transaction client, so the check sees the same snapshot used to save
     static async checkAvailability(slotId, partySize, db = prisma) {
@@ -75,8 +84,8 @@ class ReservationDAO {
         };
     }
 
-    // `requirements` are the optional needs of the party (e.g. allergies), null if none
-    static async saveReservation(userId, slotId, people, requirements = null) {
+    // `requirements` are the optional needs of the party: list of { allergies, description }, [] if none
+    static async saveReservation(userId, slotId, people, requirements = []) {
         // Checks and inserts run in a SERIALIZABLE transaction: two hikers booking the
         // same slot at the same time cannot both read the same free seats (overbooking),
         // and the same hiker cannot create two reservations for the slot.
@@ -98,7 +107,7 @@ class ReservationDAO {
     }
 
     // Must be called inside a transaction (see saveReservation)
-    static async createReservation(tx, userId, slotId, people, requirements = null) {
+    static async createReservation(tx, userId, slotId, people, requirements = []) {
         // 1. Fetch slot to check the 2-hour cutoff rule
         const slot = await tx.slot.findUnique({
             where: { slot_id: slotId }
@@ -141,7 +150,8 @@ class ReservationDAO {
             data: {
                 reservation_id: newReservationId,
                 people: people,
-                requirements: requirements,
+                has_allergies: requirements.some(r => r.allergies),
+                reservation_requirement: { create: toRequirementRows(requirements) },
                 slot_id: slotId,
                 user_id: userId
             }
@@ -158,6 +168,7 @@ class ReservationDAO {
 
         return {
             ...newReservation,
+            requirements,
             tables: tableAssignments
         };
     }
@@ -170,7 +181,7 @@ class ReservationDAO {
             //Hiker's reservation
             const reservation = await tx.reservation.findFirst({
                 where: { reservation_id: reservationId, user_id: userId },
-                include: { slot: true, reservation_table: true }
+                include: { slot: true, reservation_table: true, reservation_requirement: { select: { allergies: true, description: true } } }
             });
             if(!reservation) {
                 throw new ReservationError('NOT_FOUND', 'Reservation not found');
@@ -184,7 +195,9 @@ class ReservationDAO {
             //if the request doesn't change anything it does nothing 
             const slotChanged = slotId !== reservation.slot_id;
             const peopleChanged = people !== reservation.people;
-            const requirementsChanged = requirements !== reservation.requirements;
+            const key = list => JSON.stringify(list.map(r => [r.allergies, r.description]).sort());
+            const requirementsChanged = key(requirements) !== key(reservation.reservation_requirement);
+
             if(!slotChanged && !peopleChanged && !requirementsChanged) {
                 return { changed: false };
             }
@@ -201,7 +214,11 @@ class ReservationDAO {
             //reservation_id stays the same
             await tx.reservation.update({
                 where: { reservation_id: reservationId },
-                data: {slot_id: slotId, people, requirements}
+                data: {
+                    slot_id: slotId, 
+                    people, 
+                    has_allergies: requirements.some(r => r.allergies),
+                    reservation_requirement: { deleteMany: {}, create: toRequirementRows(requirements) }}
             });
 
             return {changed: true};
@@ -319,7 +336,8 @@ class ReservationDAO {
             include: {
                 slot: true,
                 user: { select: { user_id: true, name: true, surname: true, email: true } },
-                reservation_table: { include: { table: true } }
+                reservation_table: { include: { table: true } },
+                reservation_requirement: { select: { allergies: true, description: true }, orderBy: REQUIREMENTS_ORDER }
             }
         });
         if (!reservation) {
@@ -329,7 +347,8 @@ class ReservationDAO {
         return {
             reservation_id: reservation.reservation_id,
             people: reservation.people,
-            requirements: reservation.requirements,
+            requirements: reservation.reservation_requirement,
+            has_allergies: reservation.has_allergies,
             slot: {
                 slot_id: reservation.slot.slot_id,
                 date_time_start: reservation.slot.date_time_start,

@@ -154,9 +154,10 @@ describe('PUT /api/reservations/:reservationId', () => {
         const id = await book(anna, 'main', 3);
         sendMail.mockClear();
 
-        const res = await change(anna, id, 'main', 3, 'One vegetarian').expect(200);
+        const requirements = [{ allergies: false, description: 'One vegetarian' }];
+        const res = await change(anna, id, 'main', 3, requirements).expect(200);
 
-        expect(res.body).toMatchObject({ reservation_id: id, requirements: 'One vegetarian', changed: true, confirmation_sent: true });
+        expect(res.body).toMatchObject({ reservation_id: id, requirements, changed: true, confirmation_sent: true });
         expect(await seatsOf(id)).toEqual({ A: 3 });
         expect(sendMail).toHaveBeenCalledTimes(1);
         const [{ to, subject, text }] = sendMail.mock.calls[0];
@@ -166,10 +167,11 @@ describe('PUT /api/reservations/:reservationId', () => {
     });
 
     it('sends no email when nothing changes', async () => {
-        const id = await book(anna, 'main', 3, 'Vegan');
+        const vegan = [{ allergies: false, description: 'Vegan' }];
+        const id = await book(anna, 'main', 3, vegan);
         sendMail.mockClear();
 
-        const res = await change(anna, id, 'main', 3, 'Vegan').expect(200);
+        const res = await change(anna, id, 'main', 3, vegan).expect(200);
 
         expect(res.body.changed).toBe(false);
         expect(sendMail).not.toHaveBeenCalled();

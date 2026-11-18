@@ -766,7 +766,7 @@
             "$ref": "#/components/responses/ValidationError"
           }
         },
-        "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables."
+                "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables. Optional party requirements can be given as a list (at most `people` items), each with its own allergies flag and description; missing, null or [] means no requirements. Returns 422 if requirements is not a list, has more items than people, an item is not an object, allergies is not a boolean, or a description is empty or longer than 500 characters after trimming."
       }
     },
     "/api/reservations/{reservation_id}": {
@@ -915,6 +915,14 @@
           }
         }
       },
+      "Requirement": {
+        "type": "object",
+        "required": ["allergies", "description"],
+        "properties": {
+          "allergies": { "type": "boolean", "description": "Checked when special care is needed during meal preparation" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 500, "description": "Trimmed. Describes the subset of the party and its needs" }
+        }
+      },
       "ReservationInput": {
         "type": "object",
         "required": [
@@ -924,6 +932,17 @@
           "people": {
             "type": "integer",
             "example": 4
+          },
+          "requirements": {
+            "type": "array",
+            "nullable": true,
+            "description": "Optional, at most `people` items. Missing or null means no requirements",
+            "items": { "$ref": "#/components/schemas/Requirement" },
+            "example": [
+              { "allergies": true, "description": "1 vegan, peanut allergy" },
+              { "allergies": true, "description": "1 shellfish allergy" },
+              { "allergies": false, "description": "2 vegetarians" }
+            ]
           }
         }
       },
@@ -938,6 +957,11 @@
             "type": "integer",
             "example": 4
           },
+          "requirements": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Requirement" }
+          },
+          "has_allergies": { "type": "boolean" },
           "slot_id": {
             "type": "string",
             "format": "uuid"
@@ -1113,7 +1137,8 @@
         "properties": {
           "slot_id": { "type": "string", "format": "uuid" },
           "people": { "type": "integer", "minimum": 1, "example": 4 },
-          "requirements": { "type": "string", "nullable": true, "maxLength": 500, "example": "One vegetarian" }
+          "requirements": { "type": "array", "nullable": true, "description": "Replaces the whole list, at most `people` items. null or [] removes all requirements", "items": { "$ref": "#/components/schemas/Requirement" } }
+
         }
       },
       "ReservationDetails": {
@@ -1121,7 +1146,8 @@
         "properties": {
           "reservation_id": { "type": "string", "format": "uuid" },
           "people": { "type": "integer" },
-          "requirements": { "type": "string", "nullable": true },
+          "requirements": { "type": "array", "items": { "$ref": "#/components/schemas/Requirement" } },
+          "has_allergies": { "type": "boolean", "description": "True if at least one requirement has allergies" },
           "slot": {
             "type": "object",
             "properties": {

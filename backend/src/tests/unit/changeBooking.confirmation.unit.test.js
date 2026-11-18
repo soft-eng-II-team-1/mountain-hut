@@ -11,7 +11,7 @@ const { sendEmail } = await import('../../config/mailer.js');
 const details = {
     reservation_id: '123e4567-e89b-12d3-a456-426655440000',
     people: 5,
-    requirements: 'Two children',
+    requirements: [{ allergies: false, description: 'Two children' }],
     slot: {
         date_time_start: new Date('2026-07-15T10:00:00Z'),
         date_time_end: new Date('2026-07-15T12:00:00Z'),

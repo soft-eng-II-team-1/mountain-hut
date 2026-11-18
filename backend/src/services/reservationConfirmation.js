@@ -59,7 +59,7 @@ const formatTables = (tables) => tables
 /**
  * Builds the confirmation email of a reservation.
  *
- * @param {{ reservation_id: string, people: number, requirements: string | null,
+ * @param {{ reservation_id: string, people: number, requirements: { allergies: boolean, description: string }[],
  *           slot: { date_time_start: Date, date_time_end: Date },
  *           hiker: { name: string, surname: string, email: string },
  *           tables?: { number: string, seats_reserved: number }[] }} details
@@ -69,13 +69,15 @@ const formatTables = (tables) => tables
  */
 export function buildConfirmationEmail(details, kind = 'created') {
     const texts = EMAIL_TEXT[kind];
-    const { reservation_id, people, requirements, slot, hiker, tables = [] } = details;
+    const { reservation_id, people, requirements = [], slot, hiker, tables = [] } = details;
 
     const fullName = `${hiker.name} ${hiker.surname}`;
     const date = formatDate(slot.date_time_start);
     const time = `${formatTime(slot.date_time_start)} - ${formatTime(slot.date_time_end)}`;
     const party = `${people} ${people === 1 ? 'person' : 'people'}`;
-    const notes = requirements?.trim() || 'None';
+    const notes = requirements
+        .map(r => `${r.allergies ? 'ALLERGY: ' : ''}${r.description}`)
+        .join('; ') || 'None';
 
     // label / value rows shared by the text and the html version
     const rows = [

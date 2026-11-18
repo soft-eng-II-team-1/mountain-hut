@@ -11,7 +11,7 @@ describe('Reservation Confirmation Service', () => {
     const mockDetails = {
         reservation_id: '123e4567-e89b-12d3-a456-426655440000',
         people: 4,
-        requirements: 'Vegetarian meals required',
+        requirements: [{ allergies: false, description: 'Vegetarian meals required' }],
         slot: {
             date_time_start: new Date('2026-07-15T10:00:00Z'),
             date_time_end: new Date('2026-07-15T12:00:00Z'),
@@ -54,7 +54,7 @@ describe('Reservation Confirmation Service', () => {
         test('should escape user-written text in the html', () => {
             const { html } = buildConfirmationEmail({
                 ...mockDetails,
-                requirements: '<script>alert("x")</script>',
+                requirements: [{ allergies: false, description: '<script>alert("x")</script>' }],
             });
 
             expect(html).not.toContain('<script>');
@@ -62,7 +62,7 @@ describe('Reservation Confirmation Service', () => {
         });
 
         test('should show "None" when there are no requirements', () => {
-            const { text } = buildConfirmationEmail({ ...mockDetails, requirements: null });
+            const { text } = buildConfirmationEmail({ ...mockDetails, requirements: [] });
 
             expect(text).toContain('Requirements: None');
         });
