@@ -1,5 +1,11 @@
 import {request} from "./client";
-import type {BookableSlot, PartyRequirement, Reservation} from "../types";
+import type {
+  BookableSlot,
+  PartyRequirement,
+  Reservation,
+  ReservationDetails,
+  ReservationUpdate,
+} from "../types";
 
 // MH-01: slots between two dates that still have `partySize` free seats.
 // The backend leaves out slots that start in less than 2 hours
@@ -27,3 +33,28 @@ export const savePartyRequirements = (
     "PUT",
     {requirements},
   );
+
+// --- My bookings (hiker) ---
+
+// NOTE: not in the backend yet. Bookings of the logged-in hiker, any order
+export const getMyReservations = () =>
+  request<ReservationDetails[]>("/api/reservations");
+
+export const getReservation = (reservationId: string) =>
+  request<ReservationDetails>(`/api/reservations/${reservationId}`);
+
+// MH-06 (feat/backend-change-booking): slot, party size and requirements together,
+// allowed up to 48h before the meal. The backend re-checks availability
+export const updateReservation = (
+  reservationId: string,
+  data: ReservationUpdate,
+) =>
+  request<ReservationDetails>(
+    `/api/reservations/${reservationId}`,
+    "PUT",
+    data,
+  );
+
+// NOTE: not in the backend yet. Cancels the booking, same 48h limit
+export const cancelReservation = (reservationId: string) =>
+  request<void>(`/api/reservations/${reservationId}`, "DELETE");

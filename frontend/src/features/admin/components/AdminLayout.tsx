@@ -1,6 +1,6 @@
 import {useState} from "react";
-import {Link, NavLink, Outlet, useNavigate} from "react-router";
-import logo from "../../../assets/logo.svg";
+import {Link, Outlet, useNavigate} from "react-router";
+import Sidebar from "../../../components/layout/Sidebar";
 import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import LayoutIcon from "../../../assets/icons/admin/dashboard.svg";
@@ -18,10 +18,6 @@ export default function AdminLayout() {
     () => window.matchMedia("(min-width: 768px)").matches,
   );
 
-  const closeOnMobile = () => {
-    if (!window.matchMedia("(min-width: 768px)").matches) setSidebarOpen(false);
-  };
-
   const handleLogout = async () => {
     try {
       await logout();
@@ -38,45 +34,12 @@ export default function AdminLayout() {
 
   return (
     <div className="flex h-full bg-[#f3f5f7] text-[#23404d]">
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/30 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-56 shrink-0 flex-col bg-[#536b75] text-white transition-transform md:static md:transition-none ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full md:hidden"
-        }`}
-      >
-        <Link
-          to="/"
-          className="flex flex-col items-center gap-1 px-4 pt-5 pb-6 text-center"
-        >
-          <img src={logo} alt="Logo" className="h-14 w-14" />
-          <p className="text-sm font-semibold tracking-wide">FOND DES FOURS</p>
-          <p className="text-[0.625rem] font-medium tracking-wide">MOUNTAIN HUT</p>
-        </Link>
-
-        <p className="px-4 pb-2 text-sm text-white/60">Dashboard</p>
-        <nav className="flex flex-col">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              onClick={closeOnMobile}
-              className={({isActive}) =>
-                `px-4 py-3 text-sm font-semibold transition ${
-                  isActive ? "bg-white/15" : "hover:bg-white/10"
-                }`
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
+      <Sidebar
+        items={navItems}
+        sectionLabel="Dashboard"
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between bg-white px-4 shadow-sm">
@@ -89,7 +52,9 @@ export default function AdminLayout() {
             <img src={LayoutIcon} alt="Menu" className="h-5 w-5" />
           </button>
           <div className="flex items-center gap-4 text-sm">
-            <span className="font-medium">Logged in as {roleLabel}</span>
+            <Link to="/profile" className="font-medium hover:underline">
+              Logged in as {roleLabel}
+            </Link>
             <button
               type="button"
               onClick={handleLogout}

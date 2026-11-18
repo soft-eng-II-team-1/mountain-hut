@@ -11,6 +11,11 @@ import SignupPage from "./features/auth/pages/SignupPage";
 import UpdatePasswordPage from "./features/auth/pages/UpdatePasswordPage";
 import ChangePasswordPage from "./features/auth/pages/ChangePasswordPage";
 import ForgotPasswordPage from "./features/auth/pages/ForgotPasswordPage";
+import ProfileLayout from "./features/profile/components/ProfileLayout";
+import ProfilePage from "./features/profile/pages/ProfilePage";
+import MyBookingsPage from "./features/profile/pages/MyBookingsPage";
+import ReservationDetailsPage from "./features/profile/pages/ReservationDetailsPage";
+import EditBookingPage from "./features/profile/pages/EditBookingPage";
 import AdminLayout from "./features/admin/components/AdminLayout";
 import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
@@ -45,6 +50,32 @@ const router = createBrowserRouter([
               {
                 path: "book/:reservationId/requirements",
                 element: <PartyRequirementsPage />,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        path: "/profile",
+        element: <RequireRole roles={ALL_ROLES} />,
+        children: [
+          {
+            element: <ProfileLayout />,
+            children: [
+              {index: true, element: <ProfilePage />},
+              {
+                element: <RequireRole roles={["hiker"]} />,
+                children: [
+                  {path: "bookings", element: <MyBookingsPage />},
+                  {
+                    path: "bookings/:reservationId",
+                    element: <ReservationDetailsPage />,
+                  },
+                  {
+                    path: "bookings/:reservationId/edit",
+                    element: <EditBookingPage />,
+                  },
+                ],
               },
             ],
           },
