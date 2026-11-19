@@ -80,6 +80,12 @@ const book = (agent, slotKey, body) => agent.post(`/api/slots/${slotIds[slotKey]
 const sentEmails = () => sendMail.mock.calls.map(([message]) => message);
 const lastEmail = () => sentEmails().at(-1);
 
+// Reservation as saved in the DB, with its requirements
+const findSaved = (reservationId) => prisma.reservation.findUnique({
+    where: { reservation_id: reservationId },
+    include: { reservation_requirement: { select: { allergies: true, description: true } } },
+});
+
 beforeAll(async () => {
     await createUser('anna', 'hiker', 'Anna', 'Bianchi');
     await createUser('marco', 'hiker', 'Marco', 'Rossi');
@@ -129,12 +135,12 @@ describe('Confirmation email after a booking', () => {
 
     it('saves the party requirements and still sends one confirmation', async () => {
         const agent = await loginAs('marco');
-        const requirements = 'One person is allergic to nuts';
+        const requirements = [{ allergies: true, description: 'One person is allergic to nuts' }];
 
         const res = await book(agent, 'lunch', { people: 2, requirements }).expect(201);
 
-        const saved = await prisma.reservation.findUnique({ where: { reservation_id: res.body.reservation_id } });
-        expect(saved).toMatchObject({ user_id: users.marco.user_id, people: 2, requirements });
+        const saved = await findSaved(res.body.reservation_id);
+        expect(saved).toMatchObject({ user_id: users.marco.user_id, people: 2, has_allergies: true, reservation_requirement: requirements });
         expect(sendMail).toHaveBeenCalledTimes(1);
         expect(lastEmail().to).toBe(users.marco.email);
     });
@@ -154,25 +160,24 @@ describe('Party requirements', () => {
     it('saves the requirements trimmed and returns them in the response', async () => {
         const agent = await loginAs('paolo');
 
-        const res = await book(agent, 'small', { people: 1, requirements: '   Vegan menu   ' }).expect(201);
+        const res = await book(agent, 'small', { people: 1, requirements: [{ allergies: false, description: '   Vegan menu   ' }] }).expect(201);
 
-        const saved = await prisma.reservation.findUnique({ where: { reservation_id: res.body.reservation_id } });
-        expect(saved.requirements).toBe('Vegan menu');
-        expect(res.body.requirements).toBe('Vegan menu');
+        const saved = await findSaved(res.body.reservation_id);
+        expect(saved.reservation_requirement).toEqual([{ allergies: false, description: 'Vegan menu' }]);
+        expect(res.body.requirements).toEqual([{ allergies: false, description: 'Vegan menu' }]);
     });
 
     it.each([
         ['omitted', {}],
         ['null', { requirements: null }],
-        ['an empty text', { requirements: '' }],
-        ['only spaces', { requirements: '    ' }],
+        ['an empty list', { requirements: [] }],
     ])('stores no requirements when they are %s', async (_, extra) => {
         const agent = await loginAs('elena');
 
         const res = await book(agent, 'small', { people: 1, ...extra }).expect(201);
 
-        const saved = await prisma.reservation.findUnique({ where: { reservation_id: res.body.reservation_id } });
-        expect(saved.requirements).toBeNull();
+        const saved = await findSaved(res.body.reservation_id);
+        expect(saved.reservation_requirement).toEqual([]);
         expect(sendMail).toHaveBeenCalledTimes(1);
 
         // Same hiker in the next case: remove the booking ("only one booking per slot")
@@ -182,20 +187,20 @@ describe('Party requirements', () => {
 
     it('accepts requirements of exactly 500 characters', async () => {
         const agent = await loginAs('elena');
-        const requirements = 'x'.repeat(500);
+        const requirements = [{ allergies: false, description: 'x'.repeat(500) }];
 
         const res = await book(agent, 'small', { people: 1, requirements }).expect(201);
 
-        const saved = await prisma.reservation.findUnique({ where: { reservation_id: res.body.reservation_id } });
-        expect(saved.requirements).toBe(requirements);
+        const saved = await findSaved(res.body.reservation_id);
+        expect(saved.reservation_requirement).toEqual(requirements);
         await prisma.reservation_table.deleteMany({ where: { reservation_id: saved.reservation_id } });
         await prisma.reservation.delete({ where: { reservation_id: saved.reservation_id } });
     });
 
     it.each([
-        ['longer than 500 characters', 'x'.repeat(501)],
+        ['with a description longer than 500 characters', [{ allergies: false, description: 'x'.repeat(501) }]],
         ['a number', 42],
-        ['an array', ['nuts']],
+        ['a list of texts', ['nuts']],
         ['an object', { allergy: 'nuts' }],
     ])('responds 422 and sends no email when requirements are %s', async (_, requirements) => {
         const agent = await loginAs('elena');
@@ -280,7 +285,8 @@ describe('GET /api/reservations/:reservationId', () => {
         expect(res.body).toMatchObject({
             reservation_id: reservationId,
             people: 2,
-            requirements: 'One person is allergic to nuts',
+            requirements: [{ allergies: true, description: 'One person is allergic to nuts' }],
+            has_allergies: true,
             slot: {
                 slot_id: slotIds.lunch,
                 date_time_start: slots.lunch.date_time_start.toISOString(),

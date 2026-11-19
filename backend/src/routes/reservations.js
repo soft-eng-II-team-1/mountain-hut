@@ -13,13 +13,21 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 const MAX_REQUIREMENTS_LENGTH = 500;
 
-//party requirements: null/empty text --> null, invalid --> undefined
+//party requirements: list of { allergies, description }; null/missing --> [], invalid --> undefined
 const parseRequirements = (value) => {
-    if (value == null) 
-        return null;
-    if(typeof value !== 'string' || value.trim().length > MAX_REQUIREMENTS_LENGTH) 
+    if (value == null)
+        return [];
+    if (!Array.isArray(value))
         return undefined;
-    return value.trim() || null;
+    const parsed = [];
+    for (const item of value) {
+        if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined;
+        if (typeof item.allergies !== 'boolean' || typeof item.description !== 'string') return undefined;
+        const description = item.description.trim();
+        if (!description || description.length > MAX_REQUIREMENTS_LENGTH) return undefined;
+        parsed.push({ allergies: item.allergies, description });
+    }
+    return parsed;
 }
 
 //HTTP status of each reservation error code
@@ -97,14 +105,12 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
             return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
         }
 
-        // Optional requirements of the party (e.g. allergies): an empty text means no requirements
-        let requirements = req.body.requirements ?? null;
-        if (requirements !== null) {
-            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
-                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
-            }
-            requirements = requirements.trim() || null;
+        // Optional requirements of the party: one entry per subset of the party, each with an allergies flag
+        const requirements = parseRequirements(req.body.requirements);
+        if (requirements === undefined || requirements.length > people) {
+            return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a list of at most ${people} items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
         }
+
 
         const newReservation = await ReservationDAO.saveReservation(req.user.user_id, slotId, people, requirements);
 
@@ -174,9 +180,10 @@ router.put('/reservations/:reservationId', isHiker, async (req, res) => {
         if (!Number.isInteger(people) || people <= 0) {
             errors.push({ field: 'people', message: 'people must be a positive integer' });
         }
-        if (requirements === undefined) {
-            errors.push({ field: 'requirements', message: `requirements must be null or a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` });
+        if (requirements === undefined || (Number.isInteger(people) && requirements.length > people)) {
+            errors.push({ field: 'requirements', message: `requirements must be null or a list of at most people items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` });
         }
+
         if (errors.length) {
             return res.status(422).json({ errors });
         }
