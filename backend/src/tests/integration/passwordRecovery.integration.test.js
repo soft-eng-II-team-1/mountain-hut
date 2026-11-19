@@ -152,6 +152,19 @@ describe('PUT /api/auth/password', () => {
         await login('marco', PASSWORD).expect(200);
         await login('anna', NEW_PASSWORD).expect(200);
     });
+
+    it('invalidates a pending recovery code when the password is changed', async () => {
+        await requestCode(users.anna.email).expect(202);
+        const code = lastCode();
+        const agent = await loginAs('anna');
+
+        await agent.put('/api/auth/password').send({ oldPassword: PASSWORD, newPassword: NEW_PASSWORD }).expect(200);
+
+        expect(await otpOf('anna')).toBeNull();
+        await confirmReset(users.anna.email, code, 'attackerPassword1').expect(400);
+        await login('anna', NEW_PASSWORD).expect(200);
+    });
+
 });
 
 describe('POST /api/auth/password-reset/request', () => {

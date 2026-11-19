@@ -62,8 +62,8 @@ describe('UserDAO.changeUserPassword', () => {
         const result = await userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD);
 
         expect(result).toBe(true);
-        expect(prismaMock.user.update).toHaveBeenCalledTimes(1);
-        const { where, data } = prismaMock.user.update.mock.calls[0][0];
+        expect(txMock.user.update).toHaveBeenCalledTimes(1);
+        const { where, data } = txMock.user.update.mock.calls[0][0];
         expect(where).toEqual({ email: EMAIL });
         expect(data.salt).toMatch(/^[0-9a-f]{32}$/);
         expect(data.salt).not.toBe(user.salt);
@@ -92,7 +92,7 @@ describe('UserDAO.changeUserPassword', () => {
     it('lets the user log in with the new password and not with the old one', async () => {
         let saved = storedUser();
         prismaMock.user.findUnique.mockImplementation(async () => saved);
-        prismaMock.user.update.mockImplementation(async ({ data }) => {
+        txMock.user.update.mockImplementation(async ({ data }) => {
             saved = { ...saved, ...data };
             return saved;
         });
@@ -111,10 +111,20 @@ describe('UserDAO.changeUserPassword', () => {
 
     it('rethrows database errors on update', async () => {
         prismaMock.user.findUnique.mockResolvedValue(storedUser());
-        prismaMock.user.update.mockRejectedValue(new Error('DB down'));
+        txMock.user.update.mockRejectedValue(new Error('DB down'));
 
         await expect(userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD)).rejects.toThrow('DB down');
     });
+
+    it('deletes any outstanding recovery code in the same transaction', async () => {
+        prismaMock.user.findUnique.mockResolvedValue(storedUser());
+
+        await userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD);
+
+        expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
+        expect(txMock.otp_user.deleteMany).toHaveBeenCalledWith({ where: { user_id: 'user-1' } });
+    });
+
 });
 
 describe('UserDAO.saveRecoveryCode', () => {

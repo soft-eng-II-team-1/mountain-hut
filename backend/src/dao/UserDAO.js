@@ -91,14 +91,23 @@ export default function userDAO() {
                 });
             });
 
-            await prisma.user.update({
-                where: {
-                    email: email
-                },
-                data: {
-                    hash,
-                    salt
-                }
+            await prisma.$transaction(async (transaction) => {
+                await transaction.user.update({
+                    where: {
+                        email: email
+                    },
+                    data: {
+                        hash,
+                        salt
+                    }
+                });
+
+                //password change makes any outstanding recovery code useless
+                await transaction.otp_user.deleteMany({
+                    where: {
+                        user_id: user.user_id
+                    }
+                });
             });
 
             return true;
