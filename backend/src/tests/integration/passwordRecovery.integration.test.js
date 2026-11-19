@@ -165,6 +165,23 @@ describe('PUT /api/auth/password', () => {
         await login('anna', NEW_PASSWORD).expect(200);
     });
 
+    it('lets only one of a concurrent password change and recovery succeed', async () => {
+        await requestCode(users.anna.email).expect(202);
+        const code = lastCode();
+        const agent = await loginAs('anna');
+
+        const [change, reset] = await Promise.all([
+            agent.put('/api/auth/password').send({ oldPassword: PASSWORD, newPassword: 'changedPassword1' }),
+            confirmReset(users.anna.email, code, 'recoveredPassword1'),
+        ]);
+
+        expect([change.status, reset.status].filter((status) => status === 200)).toHaveLength(1);
+        const winner = change.status === 200 ? 'changedPassword1' : 'recoveredPassword1';
+        const loser = change.status === 200 ? 'recoveredPassword1' : 'changedPassword1';
+        await login('anna', winner).expect(200);
+        await login('anna', loser).expect(401);
+    });
+
 });
 
 describe('POST /api/auth/password-reset/request', () => {

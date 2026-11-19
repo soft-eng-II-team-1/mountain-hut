@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 // Prisma mock
 const txMock = {
     otp_user: { deleteMany: jest.fn() },
-    user: { update: jest.fn() },
+    user: { update: jest.fn(), updateMany: jest.fn() },
 };
 
 const prismaMock = {
@@ -52,6 +52,7 @@ beforeEach(() => {
     txMock.user.update.mockResolvedValue({});
     prismaMock.user.update.mockResolvedValue({});
     prismaMock.otp_user.upsert.mockResolvedValue({});
+    txMock.user.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('UserDAO.changeUserPassword', () => {
@@ -62,9 +63,9 @@ describe('UserDAO.changeUserPassword', () => {
         const result = await userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD);
 
         expect(result).toBe(true);
-        expect(txMock.user.update).toHaveBeenCalledTimes(1);
-        const { where, data } = txMock.user.update.mock.calls[0][0];
-        expect(where).toEqual({ email: EMAIL });
+        expect(txMock.user.updateMany).toHaveBeenCalledTimes(1);
+        const { where, data } = txMock.user.updateMany.mock.calls[0][0];
+        expect(where).toEqual({ user_id: 'user-1', hash: user.hash, salt: user.salt });
         expect(data.salt).toMatch(/^[0-9a-f]{32}$/);
         expect(data.salt).not.toBe(user.salt);
         expect(data.hash).toBe(hashWith(NEW_PASSWORD, data.salt));
@@ -92,9 +93,9 @@ describe('UserDAO.changeUserPassword', () => {
     it('lets the user log in with the new password and not with the old one', async () => {
         let saved = storedUser();
         prismaMock.user.findUnique.mockImplementation(async () => saved);
-        txMock.user.update.mockImplementation(async ({ data }) => {
+        txMock.user.updateMany.mockImplementation(async ({ data }) => {
             saved = { ...saved, ...data };
-            return saved;
+            return {count: 1};
         });
 
         await userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD);
@@ -111,7 +112,7 @@ describe('UserDAO.changeUserPassword', () => {
 
     it('rethrows database errors on update', async () => {
         prismaMock.user.findUnique.mockResolvedValue(storedUser());
-        txMock.user.update.mockRejectedValue(new Error('DB down'));
+        txMock.user.updateMany.mockRejectedValue(new Error('DB down'));
 
         await expect(userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD)).rejects.toThrow('DB down');
     });
@@ -123,6 +124,16 @@ describe('UserDAO.changeUserPassword', () => {
 
         expect(prismaMock.$transaction).toHaveBeenCalledTimes(1);
         expect(txMock.otp_user.deleteMany).toHaveBeenCalledWith({ where: { user_id: 'user-1' } });
+    });
+
+    it('fails without touching the recovery codes if the password changed after the check', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(storedUser());
+    txMock.user.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await userDao.changeUserPassword(EMAIL, OLD_PASSWORD, NEW_PASSWORD);
+
+    expect(result).toBe(false);
+    expect(txMock.otp_user.deleteMany).not.toHaveBeenCalled();
     });
 
 });
