@@ -110,7 +110,13 @@ router.put('/password', isLoggedIn, changePasswordRules, validateRequest, async 
         if (!result) {
             return res.status(401).json({ error: 'Old credentials are incorrect' });
         }
-        return res.status(200).end();
+        const updatedUser = {...req.user, first_login: false}; //update session to first_login: false
+        req.login(updatedUser, (err) => {
+            if(err) {
+                return next(err);
+            }
+            return res.status(200).json(updateUser);
+        });
     } catch (err) {
         return next(err);
     }

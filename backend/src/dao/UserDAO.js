@@ -25,7 +25,7 @@ export default function userDAO() {
                             resolve(false);
                         }
                         else {
-                            resolve({ user_id: user.user_id, email: user.email, role: user.role });
+                            resolve({ user_id: user.user_id, email: user.email, role: user.role, first_login: user.first_login });
                         }
                     }
                 });
@@ -99,7 +99,8 @@ export default function userDAO() {
                 },
                 data: {
                     hash,
-                    salt
+                    salt,
+                    first_login: false
                 }
             });
 
@@ -226,7 +227,8 @@ export default function userDAO() {
                 },
                 data: {
                     hash: newHash,
-                    salt: newSalt
+                    salt: newSalt,
+                    first_login: false
                 }
             });
 

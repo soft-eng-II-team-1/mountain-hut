@@ -19,6 +19,7 @@ import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
 
 import authRoutes from './routes/auth.js';
+import { requirePasswordChange } from './middlewares/auth.js';
 
 dotenv.config();
 
@@ -68,6 +69,8 @@ app.use(session({
 }));
 
 app.use(passport.authenticate('session'));
+
+app.use(requirePasswordChange);
 
 app.use('/api/auth', authRoutes);
 
