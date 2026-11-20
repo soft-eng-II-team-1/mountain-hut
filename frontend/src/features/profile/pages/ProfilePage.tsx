@@ -194,7 +194,7 @@ export default function ProfilePage() {
               Update your password to keep your account secure.
             </p>
           </div>
-          <Link to="/change-password" className={`${primaryButton} self-start sm:self-auto`}>
+          <Link to="/profile/change-password" className={`${primaryButton} self-start sm:self-auto`}>
             Change Password
           </Link>
         </div>

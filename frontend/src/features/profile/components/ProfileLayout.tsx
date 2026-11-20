@@ -17,11 +17,11 @@ export default function ProfileLayout() {
 
   const isStaff = !!user && STAFF_ROLES.includes(user.role);
   const items: SidebarItem[] = [
-    {to: "/profile", label: "Personal Details", end: true},
     // hikers see their bookings here, staff go back to their dashboard
     isStaff
       ? {to: "/admin", label: "Hut Dashboard"}
       : {to: "/profile/bookings", label: "My Bookings"},
+    {to: "/profile/change-password", label: "Change Password"},
   ];
 
   const handleLogout = async () => {

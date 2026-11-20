@@ -22,7 +22,7 @@ export default function UpdatePasswordPage() {
   const [loading, setLoading] = useState(false);
 
   if (user && !user.first_login)
-    return <Navigate to="/change-password" replace />;
+    return <Navigate to="/profile/change-password" replace />;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

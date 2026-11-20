@@ -12,7 +12,7 @@ import UpdatePasswordPage from "./features/auth/pages/UpdatePasswordPage";
 import ChangePasswordPage from "./features/auth/pages/ChangePasswordPage";
 import ForgotPasswordPage from "./features/auth/pages/ForgotPasswordPage";
 import ProfileLayout from "./features/profile/components/ProfileLayout";
-import ProfilePage from "./features/profile/pages/ProfilePage";
+import ProfileIndexRedirect from "./features/profile/components/ProfileIndexRedirect";
 import MyBookingsPage from "./features/profile/pages/MyBookingsPage";
 import ReservationDetailsPage from "./features/profile/pages/ReservationDetailsPage";
 import EditBookingPage from "./features/profile/pages/EditBookingPage";
@@ -39,7 +39,6 @@ const router = createBrowserRouter([
             element: <RequireRole roles={ALL_ROLES} />,
             children: [
               {path: "update-password", element: <UpdatePasswordPage />},
-              {path: "change-password", element: <ChangePasswordPage />},
             ],
           },
           {
@@ -62,7 +61,8 @@ const router = createBrowserRouter([
           {
             element: <ProfileLayout />,
             children: [
-              {index: true, element: <ProfilePage />},
+              {index: true, element: <ProfileIndexRedirect />},
+              {path: "change-password", element: <ChangePasswordPage />},
               {
                 element: <RequireRole roles={["hiker"]} />,
                 children: [

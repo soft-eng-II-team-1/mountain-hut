@@ -1,5 +1,5 @@
 import {useState, type FormEvent} from "react";
-import {Link, useNavigate} from "react-router";
+import {useNavigate} from "react-router";
 import FormCard from "../components/form/FormCard";
 import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
@@ -50,14 +50,6 @@ export default function ChangePasswordPage() {
         title="Change Password"
         subtitle="Choose a new password for your account."
         onSubmit={handleSubmit}
-        footer={
-          <>
-            Do you want to cancel?{" "}
-            <Link to="/profile" className="underline">
-              Return to Profile
-            </Link>
-          </>
-        }
       >
         <TextField
           label="Current Password"
