@@ -46,11 +46,9 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   changePassword: async (newPassword, currentPassword) => {
-    const updated = await authApi.changePassword(newPassword, currentPassword);
-    // keep what we had if the backend answers without a body, the flag is cleared either way
-    set((s) => ({
-      user: updated ?? (s.user && {...s.user, first_login: false}),
-    }));
+    await authApi.changePassword(newPassword, currentPassword);
+    // the backend answers without a body, so only the first-login flag is cleared here
+    set((s) => ({user: s.user && {...s.user, first_login: false}}));
   },
 
   logout: async () => {

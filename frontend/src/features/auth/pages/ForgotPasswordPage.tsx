@@ -5,6 +5,7 @@ import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
 import {checkNewPassword} from "../lib/passwordRules";
 import * as authApi from "../../../api/auth";
+import {ApiError} from "../../../api/client";
 import {toast} from "../../../components/popup";
 
 type Step = "email" | "code" | "password";
@@ -62,13 +63,13 @@ export default function ForgotPasswordPage() {
     event.preventDefault();
     const e: Errors = {};
     if (!code.trim()) e.code = "Please enter the code you received";
+    else if (!/^\d{10}$/.test(code.trim()))
+      e.code = "The code is made of 10 digits";
     setErrors(e);
     if (Object.keys(e).length) return;
 
-    run(async () => {
-      await authApi.verifyResetCode(email.trim(), code.trim());
-      setStep("password");
-    });
+    // the backend has no separate check, the code is verified together with the new password
+    setStep("password");
   };
 
   const savePassword = (event: FormEvent<HTMLFormElement>) => {
@@ -78,7 +79,17 @@ export default function ForgotPasswordPage() {
     if (Object.keys(e).length) return;
 
     run(async () => {
-      await authApi.resetPassword(email.trim(), code.trim(), password);
+      try {
+        await authApi.resetPassword(email.trim(), code.trim(), password);
+      } catch (err) {
+        // wrong or expired code: back to the code step
+        if (err instanceof ApiError && err.status === 400) {
+          setErrors({code: "This code is wrong or has expired"});
+          setStep("code");
+          return;
+        }
+        throw err;
+      }
       toast.success("You can now log in with your new password.", {
         title: "Password changed",
       });
@@ -152,7 +163,7 @@ export default function ForgotPasswordPage() {
             onChange={(e) => setCode(e.target.value)}
             error={errors.code}
           />
-          <SubmitButton loading={loading}>Verify Code</SubmitButton>
+          <SubmitButton loading={loading}>Continue</SubmitButton>
         </FormCard>
       </div>
     );

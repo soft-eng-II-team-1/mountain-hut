@@ -10,25 +10,24 @@ export const signup = (data: SignupData) =>
 export const logout = () => request<void>("/api/auth/logout", "POST", {});
 
 // --- Passwords ---
-// NOTE: these endpoints are not in the backend yet, the paths/bodies below are
-// the contract the frontend expects. Adjust here if the backend picks other names.
 
-// Logged-in user changes their password. current_password is omitted only for the
-// forced update after a first login (MH-07), where the backend checks first_login instead.
-export const changePassword = (new_password: string, current_password?: string) =>
-  request<User>("/api/auth/password", "PUT", {current_password, new_password});
+// Logged-in user changes their password; 401 if the old one is wrong.
+// NOTE: the backend always requires oldPassword, so the forced update after a
+// first login (MH-07, no old password) is not supported there yet.
+export const changePassword = (newPassword: string, oldPassword?: string) =>
+  request<void>("/api/auth/password", "PUT", {oldPassword, newPassword});
 
-// Sends a one-time code to the email (should answer 200 even for unknown emails)
+// Emails a one-time recovery code (valid 10 minutes). Answers 202 even for unknown emails
 export const requestPasswordReset = (email: string) =>
-  request<void>("/api/auth/password/forgot", "POST", {email});
+  request<void>("/api/auth/password-reset/request", "POST", {email});
 
-// Checks the code without consuming it, so we can move on to the new-password step
-export const verifyResetCode = (email: string, otp: string) =>
-  request<void>("/api/auth/password/verify-otp", "POST", {email, otp});
-
-// Sets the new password using the code received by email
-export const resetPassword = (email: string, otp: string, new_password: string) =>
-  request<void>("/api/auth/password/reset", "POST", {email, otp, new_password});
+// Sets the new password with the emailed code; 400 if the code is wrong or expired
+export const resetPassword = (email: string, recoveryCode: string, newPassword: string) =>
+  request<void>("/api/auth/password-reset/confirm", "POST", {
+    email,
+    recoveryCode,
+    newPassword,
+  });
 
 // Returns null when nobody is logged in instead of throwing
 export const getCurrentUser = async (): Promise<User | null> => {
