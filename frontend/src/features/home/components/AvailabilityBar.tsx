@@ -242,7 +242,9 @@ export default function AvailabilityBar() {
               )}
             </>
           ) : (
-            <p className="text-[#cc6000]">{shown.message}</p>
+            <p className="text-[#cc6000]">
+              {"message" in shown ? shown.message : ""}
+            </p>
           )}
         </div>
       )}

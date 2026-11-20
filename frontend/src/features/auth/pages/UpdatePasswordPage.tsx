@@ -7,8 +7,9 @@ import {checkNewPassword} from "../lib/passwordRules";
 import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import {STAFF_ROLES} from "../../../types";
+import {ApiError} from "../../../api/client";
 
-type Errors = {password?: string; confirm?: string};
+type Errors = {current?: string; password?: string; confirm?: string};
 
 // forced update of the temporary password created by the staff.
 export default function UpdatePasswordPage() {
@@ -16,6 +17,7 @@ export default function UpdatePasswordPage() {
   const user = useAuthStore((s) => s.user);
   const changePassword = useAuthStore((s) => s.changePassword);
   const logout = useAuthStore((s) => s.logout);
+  const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<Errors>({});
@@ -26,19 +28,25 @@ export default function UpdatePasswordPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const e = checkNewPassword(password, confirm);
+    const e: Errors = checkNewPassword(password, confirm);
+    if (!current) e.current = "Temporary password is required";
+    else if (!e.password && password === current)
+      e.password = "The new password must be different from the temporary one";
     setErrors(e);
     if (Object.keys(e).length) return;
 
     setLoading(true);
     try {
-      await changePassword(password);
+      await changePassword(password, current);
       toast.success("Your password has been updated.");
       navigate(user && STAFF_ROLES.includes(user.role) ? "/admin" : "/", {
         replace: true,
       });
     } catch (err) {
-      toast.error((err as Error).message);
+      // an expired session is a 401 too, only this one means a wrong old password
+      if (err instanceof ApiError && err.message === "Old credentials are incorrect")
+        setErrors({current: "Temporary password is incorrect"});
+      else toast.error((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -71,6 +79,15 @@ export default function UpdatePasswordPage() {
           </>
         }
       >
+        <TextField
+          label="Temporary Password"
+          name="current-password"
+          type="password"
+          autoComplete="current-password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+          error={errors.current}
+        />
         <TextField
           label="New Password"
           name="new-password"

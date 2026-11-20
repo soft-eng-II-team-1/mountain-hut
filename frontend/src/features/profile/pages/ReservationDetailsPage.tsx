@@ -20,6 +20,9 @@ import {
 } from "../lib/bookings";
 import {useReservation} from "../lib/useReservation";
 
+// DELETE /api/reservations/:id is not in the backend yet, so the Cancel button stays hidden
+const CANCEL_SUPPORTED = false;
+
 export default function ReservationDetailsPage() {
   const {reservationId} = useParams();
   const state = useReservation(reservationId);
@@ -98,14 +101,16 @@ function Details({reservation: r}: {reservation: ReservationDetails}) {
                 Edit
               </button>
             )}
-            <button
-              type="button"
-              disabled={!changeable}
-              onClick={() => setConfirming(true)}
-              className={dangerButton}
-            >
-              Cancel
-            </button>
+            {CANCEL_SUPPORTED && (
+              <button
+                type="button"
+                disabled={!changeable}
+                onClick={() => setConfirming(true)}
+                className={dangerButton}
+              >
+                Cancel
+              </button>
+            )}
           </div>
         )}
       </div>

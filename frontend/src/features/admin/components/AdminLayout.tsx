@@ -5,9 +5,15 @@ import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import LayoutIcon from "../../../assets/icons/admin/dashboard.svg";
 
-const navItems = [
+const staffItems = [
   {to: "/admin/tables", label: "Table Management"},
   {to: "/admin/slots", label: "Time Slot Management"},
+];
+
+// booking on behalf of a hiker is for employees only (MH-07)
+const employeeItems = [
+  ...staffItems,
+  {to: "/admin/reservations", label: "Reservations"},
 ];
 
 export default function AdminLayout() {
@@ -35,7 +41,7 @@ export default function AdminLayout() {
   return (
     <div className="flex h-full bg-[#f3f5f7] text-[#23404d]">
       <Sidebar
-        items={navItems}
+        items={user?.role === "employee" ? employeeItems : staffItems}
         sectionLabel="Dashboard"
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}

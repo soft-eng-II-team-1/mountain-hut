@@ -12,9 +12,8 @@ export const logout = () => request<void>("/api/auth/logout", "POST", {});
 // --- Passwords ---
 
 // Logged-in user changes their password; 401 if the old one is wrong.
-// NOTE: the backend always requires oldPassword, so the forced update after a
-// first login (MH-07, no old password) is not supported there yet.
-export const changePassword = (newPassword: string, oldPassword?: string) =>
+// The forced update after a first login (MH-07) sends the temporary password as oldPassword
+export const changePassword = (newPassword: string, oldPassword: string) =>
   request<void>("/api/auth/password", "PUT", {oldPassword, newPassword});
 
 // Emails a one-time recovery code (valid 10 minutes). Answers 202 even for unknown emails

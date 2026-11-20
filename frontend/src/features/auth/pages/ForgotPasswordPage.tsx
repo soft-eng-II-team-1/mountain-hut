@@ -7,6 +7,7 @@ import {checkNewPassword} from "../lib/passwordRules";
 import * as authApi from "../../../api/auth";
 import {ApiError} from "../../../api/client";
 import {toast} from "../../../components/popup";
+import mailIcon from "../../../assets/icons/mail.svg";
 
 type Step = "email" | "code" | "password";
 type Errors = Partial<
@@ -15,9 +16,9 @@ type Errors = Partial<
 
 const backToLogin = (
   <>
-    Remembered it?{" "}
+    Or return to{" "}
     <Link to="/login" className="underline">
-      Return to Login
+      Login
     </Link>
   </>
 );
@@ -101,10 +102,11 @@ export default function ForgotPasswordPage() {
     return (
       <div className="py-6">
         <FormCard
-          title="Forgot Password"
-          subtitle="Enter your email and we will send you a verification code."
+          title="Forgot Password?"
+          subtitle="Enter your email address to receive a verification code."
           onSubmit={sendCode}
           footer={backToLogin}
+          icon={mailIcon}
         >
           <TextField
             label="Email Address"
@@ -128,6 +130,7 @@ export default function ForgotPasswordPage() {
           title="Enter Verification Code"
           subtitle={`We sent a code to ${email.trim()}.`}
           onSubmit={checkCode}
+          icon={mailIcon}
           footer={
             <>
               Didn’t get it?{" "}

@@ -10,7 +10,19 @@ export type BookableSlot = {
 export type SlotAvailability = {
   available: boolean;
   totalAvailableSeats: number;
+  // preview of the tables the party would get
+  suggestedTables: {table_id: string; number: string; seats_reserved: number}[];
 };
+
+// Body of POST /api/slots/:slotId/reservations/for-hiker (MH-07, employees only):
+// either user_id of a registered hiker or the temporary contact details
+export type StaffBookingInput = {
+  people: number;
+  requirements: PartyRequirement[];
+} & (
+  | {user_id: string}
+  | {temporary_name: string; temporary_phone?: string}
+);
 
 // POST /api/slots/:slotId/reservations
 export type Reservation = {

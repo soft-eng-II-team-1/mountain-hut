@@ -6,6 +6,7 @@ import type {
   ReservationDetails,
   ReservationUpdate,
   SlotAvailability,
+  StaffBookingInput,
 } from "../types";
 
 // The backend leaves out slots that start in less than 2 hours
@@ -27,6 +28,15 @@ export const getSlotAvailability = (slotId: string, partySize: number) =>
 // book a table for the logged-in hiker; the backend picks the tables
 export const bookTable = (slotId: string, people: number) =>
   request<Reservation>(`/api/slots/${slotId}/reservations`, "POST", {people});
+
+// MH-07: an employee books for a registered hiker or a temporary contact.
+// Employees can book until the slot starts (no 2-hour cutoff)
+export const bookForHiker = (slotId: string, data: StaffBookingInput) =>
+  request<Reservation>(
+    `/api/slots/${slotId}/reservations/for-hiker`,
+    "POST",
+    data,
+  );
 
 // save the dietary requirements and allergies of the party,
 export const savePartyRequirements = (

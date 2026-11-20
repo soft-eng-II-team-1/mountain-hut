@@ -10,7 +10,7 @@ type AuthState = {
   login: (email: string, password: string) => Promise<User>;
   signup: (data: SignupData) => Promise<User>;
   logout: () => Promise<void>;
-  changePassword: (newPassword: string, currentPassword?: string) => Promise<void>;
+  changePassword: (newPassword: string, currentPassword: string) => Promise<void>;
 };
 
 let initStarted = false;

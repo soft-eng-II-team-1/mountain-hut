@@ -6,6 +6,7 @@ import {formatDate, formatTime, mealOf} from "../../../lib/slotTime";
 import type {BookableSlot, PartyRequirement, Reservation} from "../../../types";
 import ConfirmationEmailNote from "../components/ConfirmationEmailNote";
 import RequirementRow from "../components/RequirementRow";
+import {seatingOf} from "../lib/seating";
 
 // what the Book a Table page passes when it navigates here
 export type PartyRequirementsState = {
@@ -17,12 +18,6 @@ type RequirementDraft = PartyRequirement & {key: number};
 
 const cardClass =
   "rounded-2xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.15)]";
-
-// "2 Tables (2+3)", "1 Table"
-const seatingOf = (tables: Reservation["tables"]) =>
-  tables.length === 1
-    ? "1 Table"
-    : `${tables.length} Tables (${tables.map((t) => t.seats_reserved).join("+")})`;
 
 // MH-05: after booking, the hiker adds the dietary restrictions and allergies of the party
 export default function PartyRequirementsPage() {

@@ -19,6 +19,7 @@ import EditBookingPage from "./features/profile/pages/EditBookingPage";
 import AdminLayout from "./features/admin/components/AdminLayout";
 import TableManagementPage from "./features/tables/pages/TableManagementPage";
 import TimeSlotManagementPage from "./features/admin/pages/TimeSlotManagementPage";
+import ReservationsPage from "./features/admin/pages/ReservationsPage";
 import BookTablePage from "./features/booking/pages/BookTablePage";
 import {ALL_ROLES, STAFF_ROLES} from "./types";
 import PartyRequirementsPage from "./features/booking/pages/PartyRequirementsPage";
@@ -91,6 +92,13 @@ const router = createBrowserRouter([
               {index: true, element: <Navigate to="tables" replace />},
               {path: "tables", element: <TableManagementPage />},
               {path: "slots", element: <TimeSlotManagementPage />},
+              // MH-07: only employees can book on behalf of a hiker
+              {
+                element: <RequireRole roles={["employee"]} />,
+                children: [
+                  {path: "reservations", element: <ReservationsPage />},
+                ],
+              },
             ],
           },
         ],
