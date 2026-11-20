@@ -14,6 +14,15 @@ const SEARCH_FIELDS = ['email', 'name', 'phone'];
 const isGiven = (value) => typeof value === 'string' && value.trim() !== '';
 const isSingleValue = (value) => typeof value === 'string';
 
+// same limits as signup (routes/auth.js): name and surname are free text, max 50 characters each,
+// so the search accepts every registered name, also written in full as "name surname"
+const NAME_MAX_LENGTH = 50;
+const FULL_NAME_MAX_LENGTH = NAME_MAX_LENGTH * 2 + 1;
+
+// NFC: an accent typed as base letter + combining mark (NFD) matches the precomposed one;
+// repeated spaces are collapsed, so "Mario   Rossi" has the same length as "Mario Rossi"
+const normalizeName = (value) => value.normalize('NFC').replace(/\s+/g, ' ').trim();
+
 const searchRules = [
     query().custom((params) => SEARCH_FIELDS.some((field) => isGiven(params[field])))
         .withMessage('At least one of email, name or phone is required'),
@@ -22,8 +31,10 @@ const searchRules = [
         .trim().toLowerCase().isEmail().withMessage('email must be a valid email'),
     query('name').optional({ values: 'falsy' })
         .custom(isSingleValue).withMessage('name must be given only once').bail()
-        .trim().isLength({ min: 2, max: 100 }).withMessage('name must be 2-100 characters long').bail()
-        .matches(/^[\p{L}\s'.-]+$/u).withMessage('name can contain only letters, spaces, apostrophes, dots and hyphens'),
+        .customSanitizer(normalizeName)
+        // a blank name ("   ") becomes "" and is ignored by the handler, like a missing one
+        .isLength({ max: FULL_NAME_MAX_LENGTH })
+        .withMessage(`name must be at most ${FULL_NAME_MAX_LENGTH} characters long`),
     query('phone').optional({ values: 'falsy' })
         .custom(isSingleValue).withMessage('phone must be given only once').bail()
         .trim().matches(/^\+?[0-9 ]+$/).withMessage('phone can contain only digits, spaces and a leading +').bail()

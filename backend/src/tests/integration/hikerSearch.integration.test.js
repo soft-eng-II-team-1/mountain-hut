@@ -5,7 +5,7 @@ import { prisma } from '../../../prisma.client.ts';
 
 const users = {};
 const stamp = Date.now();
-//letters only for name/surname to satisfy validator regex
+//timestamp written with letters, to make the test surnames unique for each run
 const stampLetters = stamp.toString().split('').map(d => String.fromCharCode(97 + Number(d))).join('');
 const PASSWORD = 'password123';
 
@@ -185,18 +185,29 @@ describe('GET /api/hikers - validation', () => {
         await agent.get('/api/hikers').query({ email: 'not-an-email' }).expect(422);
     });
 
-    //NAME TOO SHORT
-    it('responds 422 if name is less than 2 characters', async () => {
+    //NAME OF ONE CHARACTER: allowed, as at signup
+    it('responds 200 if name is a single character', async () => {
         const agent = await loginAs('employee');
 
-        await agent.get('/api/hikers').query({ name: 'a' }).expect(422);
+        const res = await agent.get('/api/hikers').query({ name: 'a' }).expect(200);
+
+        expect(Array.isArray(res.body)).toBe(true);
     });
 
-    //NAME WITH INVALID CHARACTERS
-    it('responds 422 if name contains digits or special characters', async () => {
+    //NAME WITH DIGITS OR SPECIAL CHARACTERS: allowed, as at signup
+    it('responds 200 if name contains digits or special characters', async () => {
         const agent = await loginAs('employee');
 
-        await agent.get('/api/hikers').query({ name: 'Mario123' }).expect(422);
+        const res = await agent.get('/api/hikers').query({ name: 'Mario123' }).expect(200);
+
+        expect(Array.isArray(res.body)).toBe(true);
+    });
+
+    //NAME TOO LONG: more than a 50-character name, a space and a 50-character surname
+    it('responds 422 if name is longer than 101 characters', async () => {
+        const agent = await loginAs('employee');
+
+        await agent.get('/api/hikers').query({ name: 'a'.repeat(102) }).expect(422);
     });
 
     //PHONE NUMBER NOT VALID

@@ -187,11 +187,10 @@
             "name": "name",
             "in": "query",
             "required": false,
-            "description": "Name and/or surname, also partial and in any order: every word must be contained in the name or in the surname (case-insensitive)",
+            "description": "Name and/or surname, also partial and in any order: every word must be contained in the name or in the surname (case-insensitive). Any character accepted at signup is allowed; accents are normalized (NFC) and repeated spaces collapsed. Max 101 characters (50-character name, a space, 50-character surname)",
             "schema": {
               "type": "string",
-              "minLength": 2,
-              "maxLength": 100,
+              "maxLength": 101,
               "example": "Anna Bianchi"
             }
           },
