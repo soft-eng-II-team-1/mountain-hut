@@ -15,7 +15,8 @@ const confirmationMock = {
     buildConfirmationEmail: jest.fn(),
 };
 
-jest.unstable_mockModule('../../dao/ReservationDAO.js', () => ({ default: reservationDaoMock }));
+class ReservationError extends Error { constructor(code, message) { super(message); this.code = code; } }
+jest.unstable_mockModule('../../dao/ReservationDAO.js', () => ({ default: reservationDaoMock, ReservationError }));
 jest.unstable_mockModule('../../services/reservationConfirmation.js', () => confirmationMock);
 
 const { default: reservationRoutes } = await import('../../routes/reservations.js');
@@ -51,7 +52,7 @@ const availability = {
 const reservation = {
     reservation_id: RESERVATION_ID,
     people: 3,
-    requirements: null,
+    requirements: [],
     slot_id: SLOT_ID,
     user_id: USER_ID,
     tables: [{ table_id: TABLE_ID, number: 'T1', seats_reserved: 3 }],
@@ -61,7 +62,8 @@ const reservation = {
 const details = (userId = USER_ID) => ({
     reservation_id: RESERVATION_ID,
     people: 3,
-    requirements: 'Nut allergy',
+    requirements: [{ allergies: true, description: 'Nut allergy' }],
+    has_allergies: true,
     slot: {
         slot_id: SLOT_ID,
         date_time_start: '2030-07-01T12:00:00.000Z',
@@ -173,7 +175,7 @@ describe('POST /api/slots/:slotId/reservations - booking', () => {
         const res = await request(app).post(bookingUrl).set('x-test-role', 'hiker').send({ people: 3 }).expect(201);
 
         expect(res.body).toEqual({ ...reservation, confirmation_sent: true });
-        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 3, null);
+        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 3, []);
     });
 
     it('accepts people sent as a numeric string', async () => {
@@ -181,7 +183,7 @@ describe('POST /api/slots/:slotId/reservations - booking', () => {
 
         await request(app).post(bookingUrl).set('x-test-role', 'hiker').send({ people: '3' }).expect(201);
 
-        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 3, null);
+        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 3, []);
     });
 
     it('responds 422 if the slot id is not a UUID', async () => {
@@ -232,22 +234,21 @@ describe('POST /api/slots/:slotId/reservations - party requirements (MH-03)', ()
         setupSuccessfulBooking();
 
         await request(app).post(bookingUrl).set('x-test-role', 'hiker')
-            .send({ people: 2, requirements: '  Nut allergy  ' })
+            .send({ people: 2, requirements: [{ allergies: true, description: '  Nut allergy  ' }] })
             .expect(201);
 
-        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2, 'Nut allergy');
+        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2, [{ allergies: true, description: 'Nut allergy' }]);
     });
 
     it.each([
         ['null', null],
-        ['an empty text', ''],
-        ['only spaces', '   '],
-    ])('passes null when the requirements are %s', async (_, requirements) => {
+        ['an empty list', []],
+    ])('passes an empty list when the requirements are %s', async (_, requirements) => {
         setupSuccessfulBooking();
 
         await request(app).post(bookingUrl).set('x-test-role', 'hiker').send({ people: 2, requirements }).expect(201);
 
-        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2, null);
+        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2, []);
     });
 
     it('accepts 500 characters (spaces around are not counted)', async () => {
@@ -255,17 +256,17 @@ describe('POST /api/slots/:slotId/reservations - party requirements (MH-03)', ()
         const text = 'x'.repeat(500);
 
         await request(app).post(bookingUrl).set('x-test-role', 'hiker')
-            .send({ people: 2, requirements: `  ${text}  ` })
+            .send({ people: 2, requirements:  [{ allergies: false, description: `  ${text}  ` }] })
             .expect(201);
 
-        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2, text);
+        expect(reservationDaoMock.saveReservation).toHaveBeenCalledWith(USER_ID, SLOT_ID, 2,  [{ allergies: false, description: text }]);
     });
 
     it.each([
-        ['longer than 500 characters', 'x'.repeat(501)],
+        ['with a description longer than 500 characters', [{ allergies: false, description: 'x'.repeat(501) }]],
         ['a number', 42],
         ['a boolean', true],
-        ['an array', ['nuts']],
+        ['a list of texts', ['nuts']],
         ['an object', { allergy: 'nuts' }],
     ])('responds 422 if the requirements are %s', async (_, requirements) => {
         const res = await request(app).post(bookingUrl).set('x-test-role', 'hiker').send({ people: 2, requirements }).expect(422);
@@ -283,7 +284,7 @@ describe('POST /api/slots/:slotId/reservations - confirmation email (MH-03)', ()
 
         expect(reservationDaoMock.getReservationDetails).toHaveBeenCalledWith(RESERVATION_ID);
         expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledTimes(1);
-        expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledWith(details());
+        expect(confirmationMock.sendReservationConfirmation).toHaveBeenCalledWith(details(), 'created');
     });
 
     it('still responds 201 with confirmation_sent: false if the email cannot be sent', async () => {

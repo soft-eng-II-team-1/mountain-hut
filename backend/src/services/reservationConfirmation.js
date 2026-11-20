@@ -17,6 +17,22 @@ import { sendEmail } from '../config/mailer.js';
 const HUT_TIME_ZONE = 'Europe/Rome';
 const HUT_NAME = 'Fond des Fours Mountain Hut';
 
+//text that change between reservation confirmation of a new booking (MH-3) and reservation confirmation of an update (MH-6)
+
+//TO BE REWRITTEN ONCE THE EMAIL TEMPALTE IS DONE - FOR NOW THERE ARE PLACEHOLDERS FOR THE UPDATE EMAIL
+const EMAIL_TEXT = {
+  created: {
+    subject: 'Mountain Hut - Booking confirmation',
+    title: 'Booking confirmed',
+    intro: `your table at ${HUT_NAME} is booked. Here are the details:`,
+  }, 
+  modified: { //PLACEHOLDERS 
+    subject: 'Mountain Hut - Booking updated',
+    title: 'Booking updated',
+    intro: `your table at ${HUT_NAME} has been updated. Here are the new details:`,
+  }
+}
+
 // Escapes text written by users before putting it in the html
 const escapeHtml = (value) => String(value)
     .replace(/&/g, '&amp;')
@@ -43,24 +59,25 @@ const formatTables = (tables) => tables
 /**
  * Builds the confirmation email of a reservation.
  *
- * @param {{ reservation_id: string, people: number,
- *           requirements: { allergies: boolean, description: string }[],
+ * @param {{ reservation_id: string, people: number, requirements: { allergies: boolean, description: string }[],
  *           slot: { date_time_start: Date, date_time_end: Date },
  *           hiker: { name: string, surname: string, email: string },
  *           tables?: { number: string, seats_reserved: number }[] }} details
  *        output of ReservationDAO.getReservationDetails
+ * @param {'created' | 'modified'} [kind] new booking (MH-03) or update booking (MH-06)
  * @returns {{ to: string, subject: string, text: string, html: string }}
  */
-export function buildConfirmationEmail(details) {
-    const { reservation_id, people, requirements, slot, hiker, tables = [] } = details;
+export function buildConfirmationEmail(details, kind = 'created') {
+    const texts = EMAIL_TEXT[kind];
+    const { reservation_id, people, requirements = [], slot, hiker, tables = [] } = details;
 
     const fullName = `${hiker.name} ${hiker.surname}`;
     const date = formatDate(slot.date_time_start);
     const time = `${formatTime(slot.date_time_start)} - ${formatTime(slot.date_time_end)}`;
     const party = `${people} ${people === 1 ? 'person' : 'people'}`;
-    const notes = requirements.map(requirement =>
-        `${requirement.allergies ? 'Allergies: ' : ''}${requirement.description}`
-    ).join('; ') || 'None';
+    const notes = requirements
+        .map(r => `${r.allergies ? 'ALLERGY: ' : ''}${r.description}`)
+        .join('; ') || 'None';
 
     // label / value rows shared by the text and the html version
     const rows = [
@@ -76,7 +93,7 @@ export function buildConfirmationEmail(details) {
     const text = [
         `Dear ${fullName},`,
         '',
-        `your table at ${HUT_NAME} is booked. Here are the details:`,
+        texts.intro,
         '',
         ...rows.map(([label, value]) => `${label}: ${value}`),
         '',
@@ -106,9 +123,9 @@ export function buildConfirmationEmail(details) {
       </tr>
       <tr>
         <td style="padding:24px;">
-          <h1 style="margin:0 0 8px;font-size:20px;color:#cc6000;">Booking confirmed</h1>
+          <h1 style="margin:0 0 8px;font-size:20px;color:#cc6000;">${escapeHtml(texts.title)}</h1>
           <p style="margin:0 0 16px;font-size:14px;">Dear ${escapeHtml(fullName)},<br>
-            your table at ${escapeHtml(HUT_NAME)} is booked. Here are the details:</p>
+            ${escapeHtml(texts.intro)}</p>
           <table role="presentation" cellpadding="0" cellspacing="0"
                  style="width:100%;font-size:14px;border:1px solid #d5dbe0;border-radius:8px;">${htmlRows}
           </table>
@@ -123,7 +140,7 @@ export function buildConfirmationEmail(details) {
 
     return {
         to: hiker.email,
-        subject: 'Mountain Hut - Booking confirmation',
+        subject: texts.subject,
         text,
         html,
     };
@@ -133,8 +150,9 @@ export function buildConfirmationEmail(details) {
  * Sends the confirmation email to the hiker who made the reservation.
  *
  * @param details output of ReservationDAO.getReservationDetails
- */
-export async function sendReservationConfirmation(details) {
-    const { to, subject, text, html } = buildConfirmationEmail(details);
+ * @param {'created' | 'modified'} [kind] new booking (MH-03) or update booking (MH-06)
+ * */
+export async function sendReservationConfirmation(details, kind = 'created') {
+    const { to, subject, text, html } = buildConfirmationEmail(details, kind);
     return sendEmail(to, subject, text, html);
 }

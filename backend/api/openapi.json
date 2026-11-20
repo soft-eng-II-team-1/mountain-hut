@@ -766,7 +766,40 @@
             "$ref": "#/components/responses/ValidationError"
           }
         },
-        "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables."
+                "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables. Optional party requirements can be given as a list (at most `people` items), each with its own allergies flag and description; missing, null or [] means no requirements. Returns 422 if requirements is not a list, has more items than people, an item is not an object, allergies is not a boolean, or a description is empty or longer than 500 characters after trimming."
+      }
+    },
+    "/api/reservations/{reservation_id}": {
+      "parameters": [
+        { "name": "reservation_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+      ],
+      "get": {
+        "summary": "Details of a reservation of the logged hiker",
+        "description": "Only the hiker who made the reservation.",
+        "responses": {
+          "200": { "description": "Reservation details", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationDetails" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Reservation not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
+      },
+      "put": {
+        "summary": "Change a reservation (slot, party size, requirements)",
+        "description": "Only the hiker who made the reservation. Allowed up to 48 hours before the current slot starts; the new slot must start at least 2 hours from now (same rule as booking). The booking reference does not change. Tables are kept whenever possible; they are reassigned only when the slot changes or the party grows beyond the free seats of its current tables. A confirmation email is sent only if something changed.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationUpdateInput" } } }
+        },
+        "responses": {
+          "200": { "description": "Reservation updated (or unchanged, see 'changed')", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ReservationUpdateResult" } } } },
+          "400": { "description": "Less than 48 hours before the current slot, new slot starting in less than 2 hours, insufficient seats, or no tables assigned to the new slot", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "description": "Reservation or slot not found", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "409": { "description": "The hiker already has a reservation for the new slot, or the slot was being booked concurrently (retry)", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "422": { "$ref": "#/components/responses/ValidationError" }
+        }
       }
     },
     "/api/slots/{slot_id}/reservations/for-hiker": {
@@ -1059,6 +1092,7 @@
         }
       }
     }
+
   },
   "components": {
     "schemas": {
@@ -1171,261 +1205,12 @@
           }
         }
       },
-      "PartyRequirement": {
+      "Requirement": {
         "type": "object",
-        "required": [
-          "allergies",
-          "description"
-        ],
+        "required": ["allergies", "description"],
         "properties": {
-          "allergies": {
-            "type": "boolean",
-            "description": "Explicitly indicates that special care is needed during meal preparation.",
-            "example": true
-          },
-          "description": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 500,
-            "description": "Trimmed before validation and storage. Must not be blank. Describes the affected subset of the party and its requirements.",
-            "example": "1 vegan, peanut allergy"
-          }
-        }
-      },
-      "ReservationRequirementsInput": {
-        "type": "object",
-        "required": [
-          "requirements"
-        ],
-        "properties": {
-          "requirements": {
-            "type": "array",
-            "description": "Replaces the entire stored list. An empty list clears it. Omission and null are invalid.",
-            "items": {
-              "$ref": "#/components/schemas/PartyRequirement"
-            },
-            "example": [
-              {
-                "allergies": true,
-                "description": "1 vegan, peanut allergy"
-              },
-              {
-                "allergies": true,
-                "description": "1 shellfish allergy"
-              },
-              {
-                "allergies": false,
-                "description": "2 vegetarians"
-              }
-            ]
-          }
-        }
-      },
-      "ReservationRequirements": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ReservationRequirementsInput"
-          },
-          {
-            "type": "object",
-            "required": [
-              "reservation_id",
-              "has_allergies"
-            ],
-            "properties": {
-              "reservation_id": {
-                "type": "string",
-                "format": "uuid"
-              },
-              "has_allergies": {
-                "type": "boolean",
-                "description": "True when any requirement has allergies set to true; false for an empty list.",
-                "example": true
-              }
-            }
-          }
-        ]
-      },
-      "ReservationDetails": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ReservationRequirements"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "people": {
-                "type": "integer",
-                "example": 4
-              },
-              "slot": {
-                "type": "object",
-                "properties": {
-                  "slot_id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "date_time_start": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "date_time_end": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                }
-              },
-              "hiker": {
-                "type": "object",
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "name": {
-                    "type": "string"
-                  },
-                  "surname": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  }
-                }
-              },
-              "tables": {
-                "$ref": "#/components/schemas/Reservation/properties/tables"
-              }
-            }
-          }
-        ]
-      },
-      "EmployeeReservationInput": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/ReservationInput"
-          },
-          {
-            "type": "object",
-            "description": "Exactly one owner representation is required. A registered user_id cannot be combined with non-null temporary contact fields. Requirements remain optional text, not an MH-05 requirement list.",
-            "properties": {
-              "people": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 9007199254740991,
-                "description": "Positive safe integer. Numeric strings are also accepted by the route.",
-                "example": 4
-              }
-            },
-            "oneOf": [
-              {
-                "type": "object",
-                "required": [
-                  "user_id"
-                ],
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "format": "uuid"
-                  },
-                  "temporary_name": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      null
-                    ]
-                  },
-                  "temporary_phone": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      null
-                    ]
-                  }
-                }
-              },
-              {
-                "type": "object",
-                "required": [
-                  "temporary_name"
-                ],
-                "properties": {
-                  "user_id": {
-                    "type": "string",
-                    "nullable": true,
-                    "enum": [
-                      null
-                    ],
-                    "description": "Omit or set to null for a temporary hiker."
-                  },
-                  "temporary_name": {
-                    "type": "string",
-                    "minLength": 1,
-                    "pattern": "\\S",
-                    "description": "Required nonblank name, trimmed before storage.",
-                    "example": "Anna Rossi"
-                  },
-                  "temporary_phone": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "Optional. Trimmed before validation; empty text becomes null. A nonempty value must match ^\\+?[0-9 ]{6,20}$ after trimming.",
-                    "example": "+391234567890"
-                  }
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "EmployeeReservation": {
-        "type": "object",
-        "required": [
-          "reservation_id",
-          "people",
-          "slot_id",
-          "requirements",
-          "has_allergies",
-          "tables",
-          "user_id",
-          "temporary_name",
-          "temporary_phone"
-        ],
-        "properties": {
-          "reservation_id": {
-            "$ref": "#/components/schemas/Reservation/properties/reservation_id"
-          },
-          "people": {
-            "$ref": "#/components/schemas/Reservation/properties/people"
-          },
-          "slot_id": {
-            "$ref": "#/components/schemas/Reservation/properties/slot_id"
-          },
-          "requirements": {
-            "$ref": "#/components/schemas/Reservation/properties/requirements"
-          },
-          "has_allergies": {
-            "$ref": "#/components/schemas/Reservation/properties/has_allergies"
-          },
-          "tables": {
-            "$ref": "#/components/schemas/Reservation/properties/tables"
-          },
-          "user_id": {
-            "type": "string",
-            "format": "uuid",
-            "nullable": true,
-            "description": "Selected hiker ID, or null for a temporary contact."
-          },
-          "temporary_name": {
-            "type": "string",
-            "nullable": true,
-            "description": "Temporary contact name; null for registered hikers."
-          },
-          "temporary_phone": {
-            "type": "string",
-            "nullable": true,
-            "description": "Optional temporary contact phone; null when absent or for registered hikers."
-          }
+          "allergies": { "type": "boolean", "description": "Checked when special care is needed during meal preparation" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 500, "description": "Trimmed. Describes the subset of the party and its needs" }
         }
       },
       "ReservationInput": {
@@ -1439,11 +1224,15 @@
             "example": 4
           },
           "requirements": {
-            "type": "string",
+            "type": "array",
             "nullable": true,
-            "maxLength": 500,
-            "description": "Optional single description accepted at booking time. Use the reservation requirements update endpoint to submit a list with individual allergy flags.",
-            "example": "2 vegetarians"
+            "description": "Optional, at most `people` items. Missing or null means no requirements",
+            "items": { "$ref": "#/components/schemas/Requirement" },
+            "example": [
+              { "allergies": true, "description": "1 vegan, peanut allergy" },
+              { "allergies": true, "description": "1 shellfish allergy" },
+              { "allergies": false, "description": "2 vegetarians" }
+            ]
           }
         }
       },
@@ -1458,6 +1247,11 @@
             "type": "integer",
             "example": 4
           },
+          "requirements": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Requirement" }
+          },
+          "has_allergies": { "type": "boolean" },
           "slot_id": {
             "type": "string",
             "format": "uuid"
@@ -1636,7 +1430,67 @@
             "example": 10
           }
         }
+      },
+      "ReservationUpdateInput": {
+        "type": "object",
+        "required": ["slot_id", "people", "requirements"],
+        "properties": {
+          "slot_id": { "type": "string", "format": "uuid" },
+          "people": { "type": "integer", "minimum": 1, "example": 4 },
+          "requirements": { "type": "array", "nullable": true, "description": "Replaces the whole list, at most `people` items. null or [] removes all requirements", "items": { "$ref": "#/components/schemas/Requirement" } }
+
+        }
+      },
+      "ReservationDetails": {
+        "type": "object",
+        "properties": {
+          "reservation_id": { "type": "string", "format": "uuid" },
+          "people": { "type": "integer" },
+          "requirements": { "type": "array", "items": { "$ref": "#/components/schemas/Requirement" } },
+          "has_allergies": { "type": "boolean", "description": "True if at least one requirement has allergies" },
+          "slot": {
+            "type": "object",
+            "properties": {
+              "slot_id": { "type": "string", "format": "uuid" },
+              "date_time_start": { "type": "string", "format": "date-time" },
+              "date_time_end": { "type": "string", "format": "date-time" }
+            }
+          },
+          "hiker": {
+            "type": "object",
+            "properties": {
+              "user_id": { "type": "string", "format": "uuid" },
+              "name": { "type": "string" },
+              "surname": { "type": "string" },
+              "email": { "type": "string", "format": "email" }
+            }
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "table_id": { "type": "string", "format": "uuid" },
+                "number": { "type": "string", "example": "T2" },
+                "seats_reserved": { "type": "integer" }
+              }
+            }
+          }
+        }
+      },
+      "ReservationUpdateResult": {
+        "allOf": [
+          { "$ref": "#/components/schemas/ReservationDetails" },
+          {
+            "type": "object",
+            "properties": {
+              "changed": { "type": "boolean", "description": "false if the request did not change anything (no email sent)" },
+              "confirmation_sent": { "type": "boolean" }
+            }
+          }
+        ]
       }
+
     },
     "responses": {
       "Unauthorized": {

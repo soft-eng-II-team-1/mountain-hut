@@ -1,10 +1,11 @@
 import { Router } from 'express'
 import {body, param, query } from 'express-validator';
 
-import ReservationDAO from '../dao/ReservationDAO.js';
+import ReservationDAO, {ReservationError} from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isHiker, isEmployee } from '../middlewares/auth.js';
+
 
 const router = Router();
 
@@ -24,12 +25,39 @@ const requirementRules = [
         .withMessage(`description must be a nonempty text of at most ${MAX_REQUIREMENTS_LENGTH} characters`),
 ];
 
+//party requirements: list of { allergies, description }; null/missing --> [], invalid --> undefined
+const parseRequirements = (value) => {
+    if (value == null)
+        return [];
+    if (!Array.isArray(value))
+        return undefined;
+    const parsed = [];
+    for (const item of value) {
+        if (item === null || typeof item !== 'object' || Array.isArray(item)) return undefined;
+        if (typeof item.allergies !== 'boolean' || typeof item.description !== 'string') return undefined;
+        const description = item.description.trim();
+        if (!description || description.length > MAX_REQUIREMENTS_LENGTH) return undefined;
+        parsed.push({ allergies: item.allergies, description });
+    }
+    return parsed;
+}
+
+//HTTP status of each reservation error code
+const RESERVATION_ERROR_STATUS = {
+    NOT_FOUND: 404,
+    SLOT_NOT_FOUND: 404,
+    TOO_LATE: 400,
+    INSUFFICIENT_SEATS: 400,
+    ALREADY_BOOKED: 409,
+    CONCURRENT_UPDATE: 409,
+}
+
 // Sends the booking confirmation (MH-03). Returns false instead of throwing when the
 // email cannot be sent: the reservation is already saved and must not fail because of it
-const sendConfirmation = async (reservationId) => {
+const sendConfirmation = async (reservationId, kind = 'created') => {
     try {
         const details = await ReservationDAO.getReservationDetails(reservationId);
-        await sendReservationConfirmation(details);
+        await sendReservationConfirmation(details, kind);
         return true;
     } catch (error) {
         console.error(`Confirmation email for reservation ${reservationId} not sent:`, error);
@@ -90,14 +118,12 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
             return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
         }
 
-        // Optional requirements of the party (e.g. allergies): an empty text means no requirements
-        let requirements = req.body.requirements ?? null;
-        if (requirements !== null) {
-            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
-                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
-            }
-            requirements = requirements.trim() || null;
+        // Optional requirements of the party: one entry per subset of the party, each with an allergies flag
+        const requirements = parseRequirements(req.body.requirements);
+        if (requirements === undefined || requirements.length > people) {
+            return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a list of at most ${people} items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
         }
+
 
         const newReservation = await ReservationDAO.saveReservation(req.user.user_id, slotId, people, requirements);
 
@@ -166,12 +192,9 @@ router.post('/slots/:slotId/reservations/for-hiker', isEmployee, async (req, res
             }
         }
 
-        let requirements = input.requirements ?? null;
-        if (requirements !== null) {
-            if (typeof requirements !== 'string' || requirements.trim().length > MAX_REQUIREMENTS_LENGTH) {
-                return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a text of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
-            }
-            requirements = requirements.trim() || null;
+        const requirements = parseRequirements(input.requirements);
+        if (requirements === undefined || requirements.length > people) {
+            return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a list of at most ${people} items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
         }
 
         const reservation = await ReservationDAO.saveEmployeeReservation({
@@ -239,6 +262,57 @@ router.put('/reservations/:reservationId/requirements', isHiker, requirementRule
         }
         res.status(200).json(updated);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+//PUT /api/reservations/:reservationId
+//changes slot, party size and requirements of a reservation of a logged hiker
+//allowed up to 48h before the slot starts
+//full new state is sent (All fields are required, requirement field can be null)
+router.put('/reservations/:reservationId', isHiker, async (req, res) => {
+    try {
+        const { reservationId } = req.params;
+        const slotId = typeof req.body.slot_id === 'string' ? req.body.slot_id.toLowerCase() : req.body.slot_id; 
+        const people = Number(req.body.people);
+        const requirements = req.body.requirements === undefined ? undefined : parseRequirements(req.body.requirements);
+
+        const errors = [];
+        if(!UUID_REGEX.test(reservationId)) {
+            errors.push({field: 'reservationId', message: 'reservationId must be a valid UUID'});  
+        }
+        
+        if (typeof slotId !== 'string' || !UUID_REGEX.test(slotId)) {
+            errors.push({ field: 'slot_id', message: 'slot_id must be a valid UUID' });
+        }
+        if (!Number.isInteger(people) || people <= 0) {
+            errors.push({ field: 'people', message: 'people must be a positive integer' });
+        }
+        if (requirements === undefined || (Number.isInteger(people) && requirements.length > people)) {
+            errors.push({ field: 'requirements', message: `requirements must be null or a list of at most people items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` });
+        }
+
+        if (errors.length) {
+            return res.status(422).json({ errors });
+        }
+
+        const { changed } = await ReservationDAO.updateReservation(
+            reservationId, req.user.user_id, { slotId, people, requirements }
+        );
+
+        //hiker receives an email only if something actually changed
+        const confirmationSent = changed ? await sendConfirmation(reservationId, 'modified') : false;
+
+        const details = await ReservationDAO.getReservationDetails(reservationId);
+        res.status(200).json({ ...details, changed, confirmation_sent: confirmationSent });
+    } catch (error) {
+        if (error instanceof ReservationError) {
+            return res.status(RESERVATION_ERROR_STATUS[error.code] ?? 500).json({ error: error.message });
+        }
+        // Thrown by checkAvailability when moving to a slot without tables
+        if (error.message === "No tables are assigned to this slot yet.") {
+            return res.status(400).json({ error: error.message });
+        }
         res.status(500).json({ error: error.message });
     }
 });

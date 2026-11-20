@@ -1,7 +1,19 @@
+import { jest } from '@jest/globals';
 import crypto from 'node:crypto';
-import request from 'supertest';
-import app from '../../app.js';
-import { prisma } from '../../../prisma.client.ts';
+
+// The SMTP server is replaced (as in confirmation.integration.test.js): without this mock every
+// booking would send a real email and wait for the SMTP server, making the tests slow and flaky
+const nodemailerMock = {
+    createTransport: jest.fn(() => ({ sendMail: jest.fn(async () => ({ messageId: 'test-message-id' })) })),
+    createTestAccount: jest.fn(async () => ({ user: 'test-user', pass: 'test-pass' })),
+    getTestMessageUrl: jest.fn(() => false),
+};
+jest.unstable_mockModule('nodemailer', () => ({ default: nodemailerMock }));
+
+// Must be imported AFTER the mock
+const { default: request } = await import('supertest');
+const { default: app } = await import('../../app.js');
+const { prisma } = await import('../../../prisma.client.ts');
 
 const HOUR = 60 * 60 * 1000;
 const stamp = Date.now();
