@@ -11,7 +11,7 @@ export class ReservationError extends Error {
     constructor(code, message) {
         super(message);
         this.code = code;
-    }   
+    }
 }
 
 // MH-06 : a reservation can be changed only up to 48h before its current slot starts
@@ -176,20 +176,20 @@ class ReservationDAO {
     //change slot, partySize and requirements of a reservation
     //booking reference doesn't change, table are reassigned when strictly necessary
     //returns { changed : false} if nothing changed
-    static async updateReservation(reservationId, userId, {slotId, people, requirements}) {
+    static async updateReservation(reservationId, userId, { slotId, people, requirements }) {
         return runSerializable(async (tx) => {
             //Hiker's reservation
             const reservation = await tx.reservation.findFirst({
                 where: { reservation_id: reservationId, user_id: userId },
                 include: { slot: true, reservation_table: true, reservation_requirement: { select: { allergies: true, description: true } } }
             });
-            if(!reservation) {
+            if (!reservation) {
                 throw new ReservationError('NOT_FOUND', 'Reservation not found');
             }
 
             //48h rule on the current slot
-            if(reservation.slot.date_time_start.getTime() - Date.now() < MODIFICATION_CUTOFF_MS) {
-                throw new ReservationError('TOO_LATE', 'Reservation can be changed only up to 48h before the slot starts');    
+            if (reservation.slot.date_time_start.getTime() - Date.now() < MODIFICATION_CUTOFF_MS) {
+                throw new ReservationError('TOO_LATE', 'Reservation can be changed only up to 48h before the slot starts');
             }
 
             //if the request doesn't change anything it does nothing 
@@ -198,16 +198,16 @@ class ReservationDAO {
             const key = list => JSON.stringify(list.map(r => [r.allergies, r.description]).sort());
             const requirementsChanged = key(requirements) !== key(reservation.reservation_requirement);
 
-            if(!slotChanged && !peopleChanged && !requirementsChanged) {
+            if (!slotChanged && !peopleChanged && !requirementsChanged) {
                 return { changed: false };
             }
 
             //tables assignment is modified only if the slot or the party size changes
-            if(slotChanged) {
+            if (slotChanged) {
                 await this.moveToSlot(tx, reservation, slotId, people);
-            } else if(people < reservation.people) {
+            } else if (people < reservation.people) {
                 await this.shrinkParty(tx, reservation.reservation_table, reservation.people - people);
-            } else if(people > reservation.people) {
+            } else if (people > reservation.people) {
                 await this.growParty(tx, reservation, people);
             }
 
@@ -215,39 +215,41 @@ class ReservationDAO {
             await tx.reservation.update({
                 where: { reservation_id: reservationId },
                 data: {
-                    slot_id: slotId, 
-                    people, 
+                    slot_id: slotId,
+                    people,
                     has_allergies: requirements.some(r => r.allergies),
-                    reservation_requirement: { deleteMany: {}, create: toRequirementRows(requirements) }}
+                    reservation_requirement: { deleteMany: {}, create: toRequirementRows(requirements) }
+                }
             });
 
-            return {changed: true};
+            return { changed: true };
         }, concurrentBooking);
     }
 
     //Change booking --> moves the reservation to another slot: tables are assigned from scratch
     static async moveToSlot(tx, reservation, slotId, people) {
-        const newSlot = await tx.slot.findUnique({where: {slot_id: slotId}});
-        if(!newSlot) {
+        const newSlot = await tx.slot.findUnique({ where: { slot_id: slotId } });
+        if (!newSlot) {
             throw new ReservationError('SLOT_NOT_FOUND', 'Slot not found');
         }
 
-        if(newSlot.date_time_start.getTime() - Date.now() < BOOKING_CUTOFF_MS) {
+        if (newSlot.date_time_start.getTime() - Date.now() < BOOKING_CUTOFF_MS) {
             throw new ReservationError('TOO_LATE', 'Reservations must be made at least 2 hours before the slot starts');
         }
 
         //only one booking per time slot rule
         const otherBooking = await tx.reservation.findFirst({
-            where: {slot_id: slotId,
-                    user_id: reservation.user_id,
-                    reservation_id: {not: reservation.reservation_id}
+            where: {
+                slot_id: slotId,
+                user_id: reservation.user_id,
+                reservation_id: { not: reservation.reservation_id }
             }
         });
-        if(otherBooking) {
+        if (otherBooking) {
             throw new ReservationError('ALREADY_BOOKED', 'You already have a reservation for this time slot');
         }
 
-        await tx.reservation_table.deleteMany({where: {reservation_id: reservation.reservation_id}});
+        await tx.reservation_table.deleteMany({ where: { reservation_id: reservation.reservation_id } });
         await this.assignAndSaveTables(tx, reservation.reservation_id, slotId, people);
     }
 
@@ -256,16 +258,16 @@ class ReservationDAO {
     //a table left with 0 seats is released
     static async shrinkParty(tx, rows, seatsToRemove) {
         const ordered = [...rows].sort((a, b) => a.seats_reserved - b.seats_reserved);
-        for(const row of ordered) {
-            if(seatsToRemove === 0) break;
+        for (const row of ordered) {
+            if (seatsToRemove === 0) break;
             const removed = Math.min(row.seats_reserved, seatsToRemove);
             seatsToRemove -= removed;
-            if(removed === row.seats_reserved) {
-                await tx.reservation_table.delete({where: {id: row.id}});
+            if (removed === row.seats_reserved) {
+                await tx.reservation_table.delete({ where: { id: row.id } });
             } else {
                 await tx.reservation_table.update({
-                    where: {id: row.id},
-                    data: {seats_reserved: row.seats_reserved - removed}
+                    where: { id: row.id },
+                    data: { seats_reserved: row.seats_reserved - removed }
                 });
             }
         }
@@ -278,9 +280,9 @@ class ReservationDAO {
 
         //if there aren't enough free seats for the extra people, the party cannot be seated
         const availability = await this.checkAvailability(reservation.slot_id, extraSeats, tx);
-        if(!availability.available) {
+        if (!availability.available) {
             throw new ReservationError('INSUFFICIENT_SEATS', 'Insufficient seats available for this party size');
-        }   
+        }
 
         const ownRows = new Map(reservation.reservation_table.map(rt => [rt.table_id, rt]));
         const ownFreeTables = availability.availableTables
@@ -288,16 +290,16 @@ class ReservationDAO {
             .sort((a, b) => b.remainingSeats - a.remainingSeats);
         const freeOnOwnTables = ownFreeTables.reduce((sum, t) => sum + t.remainingSeats, 0);
 
-        if(freeOnOwnTables >= extraSeats) {
+        if (freeOnOwnTables >= extraSeats) {
             //enough free seats on the party's tables, assign them first
             let left = extraSeats;
-            for(const table of ownFreeTables) {
-                if(left === 0) break;
+            for (const table of ownFreeTables) {
+                if (left === 0) break;
                 const row = ownRows.get(table.table_id);
                 const added = Math.min(left, table.remainingSeats);
                 await tx.reservation_table.update({
-                    where: {id: row.id},
-                    data: {seats_reserved: row.seats_reserved + added}
+                    where: { id: row.id },
+                    data: { seats_reserved: row.seats_reserved + added }
                 });
                 left -= added;
             }
@@ -305,7 +307,7 @@ class ReservationDAO {
         }
 
         //not enough free seats on the party's tables, reassign the whole party
-        await tx.reservation_table.deleteMany({where: {reservation_id: reservation.reservation_id}});
+        await tx.reservation_table.deleteMany({ where: { reservation_id: reservation.reservation_id } });
         await this.assignAndSaveTables(tx, reservation.reservation_id, reservation.slot_id, people);
     }
 
@@ -314,7 +316,7 @@ class ReservationDAO {
     static async assignAndSaveTables(tx, reservationId, slotId, people) {
         const availability = await this.checkAvailability(slotId, people, tx);
         const assignments = availability.available && assignTables(availability.availableTables, people);
-        if(!assignments) {
+        if (!assignments) {
             throw new ReservationError('INSUFFICIENT_SEATS', 'Insufficient seats available for this party size');
         }
 
@@ -359,6 +361,27 @@ class ReservationDAO {
                 .map(rt => ({ table_id: rt.table_id, number: rt.table.number, seats_reserved: rt.seats_reserved }))
                 .sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }))
         };
+    }
+
+    static async getActiveReservationsForUser(userId) {
+        const now = new Date();
+
+        const reservations = await prisma.reservation.findMany({
+            where: {
+                user_id: userId,
+                slot: {
+                    date_time_start: { gte: now }
+                }
+            },
+            include: {
+                slot: true,
+                user: { select: { user_id: true, name: true, surname: true, email: true } },
+                reservation_table: { include: { table: true } },
+                reservation_requirement: { select: { allergies: true, description: true }, orderBy: REQUIREMENTS_ORDER }
+            }
+        });
+        
+        return reservations;
     }
 }
 
