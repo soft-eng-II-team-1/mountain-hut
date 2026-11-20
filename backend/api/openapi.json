@@ -167,6 +167,72 @@
         }
       }
     },
+    "/api/hikers": {
+      "get": {
+        "summary": "Search registered hikers (employee or warden)",
+        "description": "MH-07. Finds a hiker already registered, so that the staff can reserve on their behalf (phone call, party arriving at the hut). At least one criterion is required; the given criteria are combined in AND. email is unique, so it is matched exactly (case-insensitive) and returns at most one hiker. name and phone are partial matches and can return several hikers. Only users with role hiker are returned, ordered by surname and name, at most 20.",
+        "parameters": [
+          {
+            "name": "email",
+            "in": "query",
+            "required": false,
+            "description": "Exact email of the hiker (case-insensitive)",
+            "schema": {
+              "type": "string",
+              "format": "email",
+              "example": "anna@example.com"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "description": "Name and/or surname, also partial and in any order: every word must be contained in the name or in the surname (case-insensitive)",
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 100,
+              "example": "Anna Bianchi"
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "required": false,
+            "description": "Phone number, also partial (at least 3 digits). Spaces are ignored",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\+?[0-9 ]+$",
+              "example": "333 1234"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hikers matching all the given criteria (empty array if none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/HikerSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
     "/api/tables": {
       "get": {
         "summary": "List all the tables",
@@ -1305,6 +1371,34 @@
           "seats": {
             "type": "integer",
             "example": 4
+          }
+        }
+      },
+      "HikerSummary": {
+        "type": "object",
+        "description": "Data of a registered hiker returned by the search, enough for the staff to recognise them",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Anna"
+          },
+          "surname": {
+            "type": "string",
+            "example": "Bianchi"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "anna@example.com"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "+39 333 1234567"
           }
         }
       },
