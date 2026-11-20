@@ -3,7 +3,13 @@ import {Link} from "react-router";
 
 // Small building blocks shared by the My Bookings pages
 
-export function PageTitle({title, children}: {title: string; children?: ReactNode}) {
+export function PageTitle({
+  title,
+  children,
+}: {
+  title: string;
+  children?: ReactNode;
+}) {
   return (
     <div className="mb-6">
       <h2 className="text-3xl font-semibold">{title}</h2>
@@ -21,7 +27,13 @@ export function Panel({children}: {children: ReactNode}) {
 }
 
 // Grey inner box with a heading, as for "General Details" and "Dietary Restrictions"
-export function InfoBox({title, children}: {title: string; children: ReactNode}) {
+export function InfoBox({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-sm font-semibold">{title}</h3>
@@ -37,7 +49,7 @@ export function BookMoreLink() {
     <p className="text-center text-sm">
       Planning your next adventure?{" "}
       <Link to="/book" className="underline">
-        Reserve a bed or book a table.
+        Book a table.
       </Link>
     </p>
   );

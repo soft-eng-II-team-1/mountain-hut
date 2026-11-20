@@ -11,6 +11,7 @@ import {
   outlineButton,
   primaryButton,
 } from "../components/BookingUi";
+import emptyImage from "../../../assets/images/image-10.png";
 
 type Loaded = {reservations: ReservationDetails[]} | {error: string};
 
@@ -95,7 +96,11 @@ function BookingGroup({
       ) : (
         <ul className="flex flex-col gap-3">
           {items.map((r) => (
-            <BookingRow key={r.reservation_id} reservation={r} manageable={manageable} />
+            <BookingRow
+              key={r.reservation_id}
+              reservation={r}
+              manageable={manageable}
+            />
           ))}
         </ul>
       )}
@@ -119,7 +124,8 @@ function BookingRow({
       <div className="shrink-0 text-sm sm:w-32 sm:border-r sm:border-gray-400 sm:pr-4">
         <p>{formatDate(r.slot.date_time_start)}</p>
         <p>
-          {formatTime(r.slot.date_time_start)} – {formatTime(r.slot.date_time_end)}
+          {formatTime(r.slot.date_time_start)} –{" "}
+          {formatTime(r.slot.date_time_end)}
         </p>
       </div>
       <div className="min-w-0 flex-1 text-sm">
@@ -148,41 +154,11 @@ function BookingRow({
 function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-4 py-4 text-center">
-      <CalendarIllustration />
-      <p className="font-semibold">Looks like you don’t have any bookings yet.</p>
+      <img src={emptyImage} alt="Empty state" className="w-2/5 h-full" />
+      <p className="font-semibold">
+        Looks like you don’t have any bookings yet.
+      </p>
       <BookMoreLink />
     </div>
-  );
-}
-
-// Simple line drawing: a desk calendar with mountains on its page
-function CalendarIllustration() {
-  return (
-    <svg
-      viewBox="0 0 200 140"
-      className="h-36 w-auto text-[#24414f]"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <circle cx="160" cy="22" r="10" className="fill-[#f2c14e] stroke-[#f2c14e]" />
-      <path d="M150 40h28M20 30h22" strokeWidth="2" className="stroke-gray-400" />
-      <rect x="45" y="30" width="110" height="92" rx="8" className="fill-white" />
-      <path d="M45 50h110" />
-      {[60, 75, 90, 105, 120, 135].map((x) => (
-        <path key={x} d="M0 0v12" transform={`translate(${x} 24)`} />
-      ))}
-      <rect x="58" y="60" width="84" height="50" rx="3" className="fill-[#e8eef1]" strokeWidth="2" />
-      <path
-        d="M60 108l22-30 12 14 16-24 30 40z"
-        className="fill-[#8aa1ab]"
-        strokeWidth="2"
-      />
-      <path d="M104 76l6-8 6 9" className="stroke-white" strokeWidth="2" />
-      <path d="M20 122h160" strokeWidth="2" className="stroke-gray-400" />
-    </svg>
   );
 }

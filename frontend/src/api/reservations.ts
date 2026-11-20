@@ -37,9 +37,43 @@ export const savePartyRequirements = (
     requirements,
   });
 
-// NOTE: not in the backend yet. Bookings of the logged-in hiker, any order
-export const getMyReservations = () =>
-  request<ReservationDetails[]>("/api/reservations");
+// GET /api/reservations/user/active answers with the database rows as they are
+type ActiveReservationRow = {
+  reservation_id: string;
+  people: number;
+  has_allergies: boolean;
+  slot: ReservationDetails["slot"];
+  reservation_requirement: PartyRequirement[];
+  reservation_table: {
+    table_id: string;
+    seats_reserved: number;
+    table: {number: string};
+  }[];
+};
+
+// Bookings of the logged-in hiker whose slot has not started yet, any order,
+// in the same shape as the details of a single booking
+export const getMyReservations = async (): Promise<ReservationDetails[]> => {
+  const rows = await request<ActiveReservationRow[]>(
+    "/api/reservations/user/active",
+  );
+  return rows.map((r) => ({
+    reservation_id: r.reservation_id,
+    people: r.people,
+    has_allergies: r.has_allergies,
+    requirements: r.reservation_requirement,
+    slot: {
+      slot_id: r.slot.slot_id,
+      date_time_start: r.slot.date_time_start,
+      date_time_end: r.slot.date_time_end,
+    },
+    tables: r.reservation_table.map((rt) => ({
+      table_id: rt.table_id,
+      number: rt.table.number,
+      seats_reserved: rt.seats_reserved,
+    })),
+  }));
+};
 
 export const getReservation = (reservationId: string) =>
   request<ReservationDetails>(`/api/reservations/${reservationId}`);
