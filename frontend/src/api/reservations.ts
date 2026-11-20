@@ -5,6 +5,7 @@ import type {
   Reservation,
   ReservationDetails,
   ReservationUpdate,
+  SlotAvailability,
 } from "../types";
 
 // The backend leaves out slots that start in less than 2 hours
@@ -16,6 +17,12 @@ export const getBookableSlots = (from: Date, to: Date, partySize: number) => {
   });
   return request<BookableSlot[]>(`/api/slots/available?${params}`);
 };
+
+// MH-04: whether the party fits in the slot. Public, answers 400 when there is no room
+export const getSlotAvailability = (slotId: string, partySize: number) =>
+  request<SlotAvailability>(
+    `/api/slots/${slotId}/availability?${new URLSearchParams({partySize: String(partySize)})}`,
+  );
 
 // book a table for the logged-in hiker; the backend picks the tables
 export const bookTable = (slotId: string, people: number) =>

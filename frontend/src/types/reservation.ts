@@ -6,6 +6,12 @@ export type BookableSlot = {
   free_seats: number;
 };
 
+// GET /api/slots/:slotId/availability (MH-04), public
+export type SlotAvailability = {
+  available: boolean;
+  totalAvailableSeats: number;
+};
+
 // POST /api/slots/:slotId/reservations
 export type Reservation = {
   reservation_id: string;

@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {useNavigate} from "react-router";
+import {useLocation, useNavigate} from "react-router";
 import {bookTable, getBookableSlots} from "../../../api/reservations";
 import {toast} from "../../../components/popup";
 import {
@@ -32,16 +32,22 @@ const labelClass = "flex flex-col gap-1 text-sm text-[#23404d]";
 const stepClass =
   "flex h-[2.375rem] w-10 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-[#f1f1f1] text-lg text-[#23404d] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50";
 
+// sent by the home page availability check, to start from the slot the hiker checked
+export type BookTableState = {date: string; guests: number; slotId: string};
+
 export default function BookTablePage() {
   const navigate = useNavigate();
-  const [date, setDate] = useState(() => toInputDate(new Date()));
-  const [guests, setGuests] = useState(2);
+  const prefill = useLocation().state as BookTableState | null;
+  const [date, setDate] = useState(
+    () => prefill?.date ?? toInputDate(new Date()),
+  );
+  const [guests, setGuests] = useState(prefill?.guests ?? 2);
   const [loaded, setLoaded] = useState<LoadedSlots | null>(null);
   // bumped to load the same day again (e.g. after a booking)
   const [reload, setReload] = useState(0);
   const loadKey = `${date}#${guests}#${reload}`;
   const [chosenMeal, setChosenMeal] = useState<Meal | "">("");
-  const [chosenSlotId, setChosenSlotId] = useState("");
+  const [chosenSlotId, setChosenSlotId] = useState(prefill?.slotId ?? "");
   const [booking, setBooking] = useState(false);
 
   // slots of the chosen day that still have room for the party.
@@ -67,7 +73,13 @@ export default function BookTablePage() {
   const bookable = loading ? [] : loaded.slots;
 
   const meals = [...new Set(bookable.map(mealOf))];
-  const meal = meals.includes(chosenMeal as Meal) ? chosenMeal : meals[0];
+  // with no meal picked yet, follow the chosen slot (e.g. the one checked on the home page)
+  const chosenSlot = bookable.find((s) => s.slot_id === chosenSlotId);
+  const meal = meals.includes(chosenMeal as Meal)
+    ? chosenMeal
+    : chosenSlot
+      ? mealOf(chosenSlot)
+      : meals[0];
   const mealSlots = bookable.filter((s) => mealOf(s) === meal);
   const slot =
     mealSlots.find((s) => s.slot_id === chosenSlotId) ?? mealSlots[0];
