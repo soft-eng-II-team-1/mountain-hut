@@ -106,6 +106,8 @@ beforeAll(async () => {
     await createSlot('justInTime', 2 * HOUR + 5 * 60 * 1000, ['E']); // starts in 2h05m
     await createSlot('noTables', 6 * 24 * HOUR, []);
     await createSlot('race', 7 * 24 * HOUR, ['D']);               // 2 seats, for the concurrency test
+    await createSlot('activeList', 2 * 24 * HOUR, []);
+    await createSlot('pastList', -24 * HOUR, []);
 });
 
 afterAll(async () => {
@@ -117,6 +119,64 @@ afterAll(async () => {
     await prisma.table.deleteMany({ where: { table_id: { in: Object.values(tableIds) } } });
     await prisma.user.deleteMany({ where: { user_id: { in: Object.values(users).map((u) => u.user_id) } } });
     await prisma.$disconnect();
+});
+
+describe('GET /api/reservations/user/active', () => {
+    it('responds 401 if not logged in', async () => {
+        await request(app).get('/api/reservations/user/active').expect(401);
+    });
+
+    it('responds 403 if logged in as employee', async () => {
+        const agent = await loginAs('employee');
+        await agent.get('/api/reservations/user/active').expect(403);
+    });
+
+    it('returns only future reservations belonging to the logged hiker', async () => {
+        const ownFuture = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 2,
+                slot_id: slotIds.activeList,
+                user_id: users.hiker5.user_id,
+            },
+        });
+        const ownPast = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 2,
+                slot_id: slotIds.pastList,
+                user_id: users.hiker5.user_id,
+            },
+        });
+        const otherFuture = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 1,
+                slot_id: slotIds.activeList,
+                user_id: users.hiker1.user_id,
+            },
+        });
+
+        const agent = await loginAs('hiker5');
+        const res = await agent.get('/api/reservations/user/active').expect(200);
+
+        const returnedIds = res.body.map((reservation) => reservation.reservation_id);
+        expect(returnedIds).toContain(ownFuture.reservation_id);
+        expect(returnedIds).not.toContain(ownPast.reservation_id);
+        expect(returnedIds).not.toContain(otherFuture.reservation_id);
+
+        await prisma.reservation.deleteMany({
+            where: {
+                reservation_id: {
+                    in: [
+                        ownFuture.reservation_id,
+                        ownPast.reservation_id,
+                        otherFuture.reservation_id,
+                    ],
+                },
+            },
+        });
+    });
 });
 
 describe('GET /api/slots/:slotId/availability', () => {

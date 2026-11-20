@@ -1,7 +1,7 @@
 import { Router } from 'express'
-import {body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
-import ReservationDAO, {ReservationError} from '../dao/ReservationDAO.js';
+import ReservationDAO, { ReservationError } from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isHiker, isEmployee } from '../middlewares/auth.js';
@@ -82,7 +82,7 @@ router.get('/slots/:slotId/availability', async (req, res) => {
         const partySize = Number(req.query.partySize);
 
         if (!UUID_REGEX.test(slotId)) {
-                        return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(partySize) || partySize <= 0) {
@@ -111,7 +111,7 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
         const people = Number(req.body.people);
 
         if (!UUID_REGEX.test(slotId)) {
-                return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(people) || people <= 0) {
@@ -273,15 +273,15 @@ router.put('/reservations/:reservationId/requirements', isHiker, requirementRule
 router.put('/reservations/:reservationId', isHiker, async (req, res) => {
     try {
         const { reservationId } = req.params;
-        const slotId = typeof req.body.slot_id === 'string' ? req.body.slot_id.toLowerCase() : req.body.slot_id; 
+        const slotId = typeof req.body.slot_id === 'string' ? req.body.slot_id.toLowerCase() : req.body.slot_id;
         const people = Number(req.body.people);
         const requirements = req.body.requirements === undefined ? undefined : parseRequirements(req.body.requirements);
 
         const errors = [];
-        if(!UUID_REGEX.test(reservationId)) {
-            errors.push({field: 'reservationId', message: 'reservationId must be a valid UUID'});  
+        if (!UUID_REGEX.test(reservationId)) {
+            errors.push({ field: 'reservationId', message: 'reservationId must be a valid UUID' });
         }
-        
+
         if (typeof slotId !== 'string' || !UUID_REGEX.test(slotId)) {
             errors.push({ field: 'slot_id', message: 'slot_id must be a valid UUID' });
         }
@@ -338,6 +338,15 @@ router.post('/reservations/:reservationId/confirmation', isHiker, async (req, re
         }
 
         res.status(200).json({ message: `Confirmation email sent to ${details.hiker.email}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reservations/user/active', isHiker, async (req, res) => {
+    try {
+        const reservations = await ReservationDAO.getActiveReservationsForUser(req.user.user_id);
+        res.status(200).json(reservations);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
