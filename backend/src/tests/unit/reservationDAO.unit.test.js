@@ -272,7 +272,8 @@ describe('ReservationDAO.saveReservation - business rules', () => {
 
     it('throws if assignTables returns null', async () => {
         setupValidBooking();
-        mockAssignTables.mockReturnValueOnce(null);
+        // assignTables is called twice: for the preview in checkAvailability (MH-04) and for the booking
+        mockAssignTables.mockReturnValue(null);
 
         await expect(ReservationDAO.saveReservation(USER_ID, SLOT_ID, 2))
             .rejects.toThrow('Insufficient seats available for this party size');
