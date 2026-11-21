@@ -8,6 +8,7 @@ import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import {STAFF_ROLES} from "../../../types";
 import {ApiError} from "../../../api/client";
+import {INVALID_OLD_PASSWORD} from "../../../api/auth";
 
 type Errors = {current?: string; password?: string; confirm?: string};
 
@@ -22,8 +23,11 @@ export default function UpdatePasswordPage() {
   const [confirm, setConfirm] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [loading, setLoading] = useState(false);
+  // checked only on open: after a successful update the store clears first_login too,
+  // and handleSubmit already does the redirect
+  const [alreadyUpdated] = useState(() => !!user && !user.first_login);
 
-  if (user && !user.first_login)
+  if (alreadyUpdated)
     return <Navigate to="/profile/change-password" replace />;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -43,8 +47,8 @@ export default function UpdatePasswordPage() {
         replace: true,
       });
     } catch (err) {
-      // an expired session is a 401 too, only this one means a wrong old password
-      if (err instanceof ApiError && err.message === "Old credentials are incorrect")
+      // an expired session is a 401 too, only this code means a wrong old password
+      if (err instanceof ApiError && err.code === INVALID_OLD_PASSWORD)
         setErrors({current: "Temporary password is incorrect"});
       else toast.error((err as Error).message);
     } finally {

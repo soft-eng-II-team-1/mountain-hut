@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1795191367014" clover="3.2.0">
+  <project timestamp="1795191367014" name="All files">
+    <metrics statements="18" coveredstatements="15" conditionals="10" coveredconditionals="8" methods="7" coveredmethods="6" elements="35" coveredelements="29" complexity="0" loc="18" ncloc="18" packages="1" files="1" classes="1"/>
+    <file name="hikerSearch.js" path="/Users/niccolonannucci/VSCodeProjects/PoliTo/mountain-hut/backend/src/routes/hikerSearch.js">
+      <metrics statements="18" coveredstatements="15" conditionals="10" coveredconditionals="8" methods="7" coveredmethods="6"/>
+      <line num="8" count="1" type="stmt"/>
+      <line num="9" count="1" type="stmt"/>
+      <line num="11" count="1" type="stmt"/>
+      <line num="14" count="19" type="cond" truecount="2" falsecount="0"/>
+      <line num="15" count="11" type="stmt"/>
+      <line num="19" count="1" type="stmt"/>
+      <line num="20" count="1" type="stmt"/>
+      <line num="24" count="10" type="stmt"/>
+      <line num="26" count="1" type="stmt"/>
+      <line num="27" count="19" type="stmt"/>
+      <line num="42" count="0" type="stmt"/>
+      <line num="43" count="0" type="cond" truecount="0" falsecount="2"/>
+      <line num="52" count="1" type="stmt"/>
+      <line num="53" count="9" type="stmt"/>
+      <line num="55" count="9" type="stmt"/>
+      <line num="56" count="9" type="stmt"/>
+      <line num="61" count="9" type="stmt"/>
+      <line num="63" count="0" type="stmt"/>
+    </file>
+  </project>
+</coverage>

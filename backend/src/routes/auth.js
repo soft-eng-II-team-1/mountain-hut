@@ -108,7 +108,8 @@ router.put('/password', isLoggedIn, changePasswordRules, validateRequest, async 
         const { oldPassword, newPassword } = req.body;
         const result = await userDAO.changeUserPassword(req.user.email, oldPassword, newPassword);
         if (!result) {
-            return res.status(401).json({ error: 'Old credentials are incorrect' });
+            //code lets the client tell a wrong old password apart from an expired session (also 401)
+            return res.status(401).json({ error: 'Old credentials are incorrect', code: 'INVALID_OLD_PASSWORD' });
         }
         const updatedUser = {...req.user, first_login: false}; //update session to first_login: false
         req.login(updatedUser, (err) => {

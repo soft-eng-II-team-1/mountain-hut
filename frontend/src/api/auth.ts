@@ -11,6 +11,9 @@ export const logout = () => request<void>("/api/auth/logout", "POST", {});
 
 // --- Passwords ---
 
+// ApiError.code sent with the 401 of a wrong old password (an expired session is a 401 without it)
+export const INVALID_OLD_PASSWORD = "INVALID_OLD_PASSWORD";
+
 // Logged-in user changes their password; 401 if the old one is wrong.
 // The forced update after a first login (MH-07) sends the temporary password as oldPassword
 export const changePassword = (newPassword: string, oldPassword: string) =>

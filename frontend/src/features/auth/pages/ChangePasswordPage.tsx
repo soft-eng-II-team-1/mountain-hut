@@ -7,6 +7,7 @@ import {checkNewPassword} from "../lib/passwordRules";
 import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import {ApiError} from "../../../api/client";
+import {INVALID_OLD_PASSWORD} from "../../../api/auth";
 
 type Errors = {current?: string; password?: string; confirm?: string};
 
@@ -39,8 +40,8 @@ export default function ChangePasswordPage() {
       toast.success("Your password has been changed.");
       navigate("/profile");
     } catch (err) {
-      // an expired session is a 401 too, only this one means a wrong old password
-      if (err instanceof ApiError && err.message === "Old credentials are incorrect")
+      // an expired session is a 401 too, only this code means a wrong old password
+      if (err instanceof ApiError && err.code === INVALID_OLD_PASSWORD)
         setErrors({current: "Current password is incorrect"});
       else toast.error((err as Error).message);
     } finally {

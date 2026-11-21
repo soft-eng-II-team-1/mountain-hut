@@ -1,5 +1,6 @@
 import {create} from "zustand";
 import * as authApi from "../api/auth";
+import {ApiError} from "../api/client";
 import type {SignupData, User} from "../types";
 
 type AuthState = {
@@ -46,7 +47,18 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 
   changePassword: async (newPassword, currentPassword) => {
-    await authApi.changePassword(newPassword, currentPassword);
+    try {
+      await authApi.changePassword(newPassword, currentPassword);
+    } catch (err) {
+      // expired session: forget the user so RequireRole sends them to /login
+      if (
+        err instanceof ApiError &&
+        err.status === 401 &&
+        err.code !== authApi.INVALID_OLD_PASSWORD
+      )
+        set({user: null});
+      throw err;
+    }
     // the backend answers without a body, so only the first-login flag is cleared here
     set((s) => ({user: s.user && {...s.user, first_login: false}}));
   },
