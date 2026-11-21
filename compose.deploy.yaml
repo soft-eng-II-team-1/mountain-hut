@@ -17,10 +17,7 @@ services:
       start_period: 5s
 
   app:
-    image: mountain-hut:deployment
-    build:
-      context: .
-      dockerfile: Dockerfile.deploy
+    image: ${APP_IMAGE:-docker.io/<registry-user>/mountain-hut:sprint2}
     container_name: mountain_hut_deployment_app
     restart: unless-stopped
     environment:
