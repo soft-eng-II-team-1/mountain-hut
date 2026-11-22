@@ -1,17 +1,23 @@
 import {useRef, useState} from "react";
-import {Navigate, useLocation, useNavigate, useParams} from "react-router";
-import {savePartyRequirements} from "../../../api/reservations";
+import {Navigate, useLocation, useNavigate} from "react-router";
+import {bookTable} from "../../../api/reservations";
 import {toast} from "../../../components/popup";
 import {formatDate, formatTime, mealOf} from "../../../lib/slotTime";
-import type {BookableSlot, PartyRequirement, Reservation} from "../../../types";
+import type {
+  BookableSlot,
+  PartyRequirement,
+  SlotAvailability,
+} from "../../../types";
 import ConfirmationEmailNote from "../components/ConfirmationEmailNote";
 import RequirementRow from "../components/RequirementRow";
 import {seatingOf} from "../lib/seating";
 
 // what the Book a Table page passes when it navigates here
 export type PartyRequirementsState = {
-  reservation: Reservation;
   slot: BookableSlot;
+  people: number;
+  // tables the party would get, the backend picks them again when booking
+  tables: SlotAvailability["suggestedTables"];
 };
 
 type RequirementDraft = PartyRequirement & {key: number};
@@ -19,9 +25,8 @@ type RequirementDraft = PartyRequirement & {key: number};
 const cardClass =
   "rounded-2xl bg-white shadow-[0_4px_12px_rgba(0,0,0,0.15)]";
 
-// MH-05: after booking, the hiker adds the dietary restrictions and allergies of the party
+// MH-05: before confirming the booking, the hiker adds the dietary restrictions and allergies of the party
 export default function PartyRequirementsPage() {
-  const {reservationId} = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   const booked = location.state as PartyRequirementsState | null;
@@ -33,11 +38,11 @@ export default function PartyRequirementsPage() {
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // reached without booking first (e.g. typed URL): start from the booking page
-  if (!booked || booked.reservation.reservation_id !== reservationId) {
+  // reached without picking a slot first (e.g. typed URL): start from the booking page
+  if (!booked) {
     return <Navigate to="/book" replace />;
   }
-  const {reservation, slot} = booked;
+  const {slot, people, tables} = booked;
 
   const errorOf = (r: PartyRequirement) =>
     showErrors && !r.description.trim()
@@ -67,8 +72,10 @@ export default function PartyRequirementsPage() {
     }
     setSaving(true);
     try {
-      await savePartyRequirements(
-        reservation.reservation_id,
+      // the reservation is created (and the confirmation email sent) only now
+      await bookTable(
+        slot.slot_id,
+        people,
         requirements.map(({allergies, description}) => ({
           allergies,
           description: description.trim(),
@@ -109,7 +116,7 @@ export default function PartyRequirementsPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt>Guests</dt>
-              <dd>{reservation.people}</dd>
+              <dd>{people}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt>Date and Time</dt>
@@ -120,7 +127,7 @@ export default function PartyRequirementsPage() {
             </div>
             <div className="flex justify-between gap-4">
               <dt>Seating</dt>
-              <dd>{seatingOf(reservation.tables)}</dd>
+              <dd>{seatingOf(tables)}</dd>
             </div>
           </dl>
 

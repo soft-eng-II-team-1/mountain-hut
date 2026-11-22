@@ -46,9 +46,9 @@ const router = createBrowserRouter([
             element: <RequireRole roles={["hiker"]} />,
             children: [
               {path: "book", element: <BookTablePage />},
-              // MH-05: party requirements of the reservation just booked
+              // MH-05: party requirements, then the hiker confirms the booking
               {
-                path: "book/:reservationId/requirements",
+                path: "book/requirements",
                 element: <PartyRequirementsPage />,
               },
             ],

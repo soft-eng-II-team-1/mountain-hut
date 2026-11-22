@@ -20,8 +20,15 @@ export default function RequireRole({roles}: RequireRoleProps) {
     );
   }
 
+  // the page state goes along too (e.g. the booking choices from the home page)
   if (!user) {
-    return <Navigate to="/login" replace state={{from: location.pathname}} />;
+    return (
+      <Navigate
+        to="/login"
+        replace
+        state={{from: location.pathname, fromState: location.state}}
+      />
+    );
   }
 
   if (!roles.includes(user.role)) {

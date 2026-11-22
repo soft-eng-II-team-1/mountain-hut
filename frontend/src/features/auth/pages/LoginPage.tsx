@@ -42,9 +42,11 @@ export default function LoginPage() {
         navigate("/update-password", {replace: true});
         return;
       }
-      const from = (location.state as {from?: string} | null)?.from;
+      const {from, fromState} =
+        (location.state as {from?: string; fromState?: unknown} | null) ?? {};
       navigate(from ?? (STAFF_ROLES.includes(user.role) ? "/admin" : "/"), {
         replace: true,
+        state: fromState,
       });
     } catch (err) {
       toast.error((err as Error).message);

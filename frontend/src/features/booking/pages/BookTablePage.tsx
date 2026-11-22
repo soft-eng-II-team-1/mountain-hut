@@ -1,6 +1,6 @@
 import {useEffect, useState} from "react";
 import {useLocation, useNavigate} from "react-router";
-import {bookTable, getBookableSlots} from "../../../api/reservations";
+import {getBookableSlots, getSlotAvailability} from "../../../api/reservations";
 import {toast} from "../../../components/popup";
 import {
   dayRange,
@@ -88,10 +88,16 @@ export default function BookTablePage() {
     if (!slot) return;
     setBooking(true);
     try {
-      const reservation = await bookTable(slot.slot_id, guests);
+      // preview of the tables only: the booking is made (and the confirmation
+      // email sent) when the hiker confirms on the next page
+      const availability = await getSlotAvailability(slot.slot_id, guests);
       // MH-05: the hiker completes the booking with the party requirements
-      const state: PartyRequirementsState = {reservation, slot};
-      navigate(`/book/${reservation.reservation_id}/requirements`, {state});
+      const state: PartyRequirementsState = {
+        slot,
+        people: guests,
+        tables: availability.suggestedTables,
+      };
+      navigate("/book/requirements", {state});
     } catch (err) {
       toast.error((err as Error).message);
       // the free seats may have changed, load them again

@@ -26,8 +26,16 @@ export const getSlotAvailability = (slotId: string, partySize: number) =>
   );
 
 // book a table for the logged-in hiker; the backend picks the tables
-export const bookTable = (slotId: string, people: number) =>
-  request<Reservation>(`/api/slots/${slotId}/reservations`, "POST", {people});
+// and sends the confirmation email (MH-03)
+export const bookTable = (
+  slotId: string,
+  people: number,
+  requirements: PartyRequirement[] = [],
+) =>
+  request<Reservation>(`/api/slots/${slotId}/reservations`, "POST", {
+    people,
+    requirements,
+  });
 
 // MH-07: an employee books for a registered hiker or a temporary contact.
 // Employees can book until the slot starts (no 2-hour cutoff)
@@ -37,15 +45,6 @@ export const bookForHiker = (slotId: string, data: StaffBookingInput) =>
     "POST",
     data,
   );
-
-// save the dietary requirements and allergies of the party,
-export const savePartyRequirements = (
-  reservationId: string,
-  requirements: PartyRequirement[],
-) =>
-  request<void>(`/api/reservations/${reservationId}/requirements`, "PUT", {
-    requirements,
-  });
 
 // GET /api/reservations/user/active answers with the database rows as they are
 type ActiveReservationRow = {
