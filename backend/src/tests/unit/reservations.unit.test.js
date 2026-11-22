@@ -93,10 +93,13 @@ afterEach(() => {
 });
 
 describe('GET /api/slots/:slotId/availability', () => {
-    it('responds 401 if not logged in', async () => {
-        await request(app).get(`${availabilityUrl}?partySize=2`).expect(401);
+    it('is available without logging in', async () => {
+        reservationDaoMock.checkAvailability.mockResolvedValue(availability);
 
-        expect(reservationDaoMock.checkAvailability).not.toHaveBeenCalled();
+        const res = await request(app).get(`${availabilityUrl}?partySize=2`).expect(200);
+
+        expect(res.body).toEqual(availability);
+        expect(reservationDaoMock.checkAvailability).toHaveBeenCalledWith(SLOT_ID, 2);
     });
 
     it.each(['hiker', 'employee', 'warden'])('is available to any logged in user (%s)', async (role) => {
