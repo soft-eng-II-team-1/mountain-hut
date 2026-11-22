@@ -1,8 +1,11 @@
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  // machine-readable reason some routes add next to the message
+  code?: string;
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.status = status;
+    this.code = code;
   }
 }
 
@@ -37,7 +40,7 @@ export async function request<T>(
 
   if (!res.ok) {
     const data = await res.json().catch(() => null);
-    throw new ApiError(res.status, readError(res.status, data));
+    throw new ApiError(res.status, readError(res.status, data), data?.code);
   }
 
   // logout and deletes answer with no body

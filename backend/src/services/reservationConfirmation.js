@@ -17,6 +17,12 @@ import { sendEmail } from '../config/mailer.js';
 const HUT_TIME_ZONE = 'Europe/Rome';
 const HUT_NAME = 'Fond des Fours Mountain Hut';
 
+// How to change the booking afterwards (MH-06), same in every confirmation
+const EDIT_INFO = [
+    'To edit your reservation, log in to your account and go to the "My Bookings" page.',
+    'Reservations can be modified up to 48 hours before the booked time slot, subject to table availability.',
+];
+
 //text that change between reservation confirmation of a new booking (MH-3) and reservation confirmation of an update (MH-6)
 
 //TO BE REWRITTEN ONCE THE EMAIL TEMPALTE IS DONE - FOR NOW THERE ARE PLACEHOLDERS FOR THE UPDATE EMAIL
@@ -99,6 +105,8 @@ export function buildConfirmationEmail(details, kind = 'created') {
         '',
         'Please keep the booking reference: you may need it to change or cancel the reservation.',
         '',
+        ...EDIT_INFO,
+        '',
         'See you in the mountains!',
         HUT_NAME,
     ].join('\n');
@@ -131,6 +139,8 @@ export function buildConfirmationEmail(details, kind = 'created') {
           </table>
           <p style="margin:16px 0 0;font-size:13px;color:#536b75;">
             Please keep the booking reference: you may need it to change or cancel the reservation.</p>
+          <p style="margin:16px 0 0;font-size:13px;color:#536b75;">
+            ${EDIT_INFO.map(escapeHtml).join('<br>')}</p>
           <p style="margin:16px 0 0;font-size:14px;">See you in the mountains!<br>${escapeHtml(HUT_NAME)}</p>
         </td>
       </tr>

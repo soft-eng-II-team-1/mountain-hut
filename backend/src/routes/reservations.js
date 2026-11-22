@@ -1,10 +1,10 @@
 import { Router } from 'express'
-import {body, param, query } from 'express-validator';
+import { body, param, query } from 'express-validator';
 
-import ReservationDAO, {ReservationError} from '../dao/ReservationDAO.js';
+import ReservationDAO, { ReservationError } from '../dao/ReservationDAO.js';
 import { sendReservationConfirmation } from '../services/reservationConfirmation.js';
 import validateRequest from '../middlewares/validateParams.js';
-import { isLoggedIn, isHiker } from '../middlewares/auth.js';
+import { isLoggedIn, isHiker, isEmployee } from '../middlewares/auth.js';
 
 
 const router = Router();
@@ -63,13 +63,13 @@ const getOwnReservation = async (req) => {
     return details;
 };
 
-router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
+router.get('/slots/:slotId/availability', async (req, res) => {
     try {
         const { slotId } = req.params;
         const partySize = Number(req.query.partySize);
 
         if (!UUID_REGEX.test(slotId)) {
-                        return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(partySize) || partySize <= 0) {
@@ -84,7 +84,7 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
 
         res.status(200).json(availability);
     } catch (error) {
-        if (error.message === "No tables are assigned to this slot yet.") {
+        if (error.message === "Slot not found" || error.message === "No tables are assigned to this slot yet.") {
             return res.status(404).json({ error: error.message });
         }
         res.status(500).json({ error: error.message });
@@ -98,7 +98,7 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
         const people = Number(req.body.people);
 
         if (!UUID_REGEX.test(slotId)) {
-                return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
         }
 
         if (!Number.isInteger(people) || people <= 0) {
@@ -139,6 +139,77 @@ router.post('/slots/:slotId/reservations', isHiker, async (req, res) => {
     }
 });
 
+// MH-07: book for a registered hiker or a temporary contact, without changing accounts.
+router.post('/slots/:slotId/reservations/for-hiker', isEmployee, async (req, res) => {
+    try {
+        const { slotId } = req.params;
+        const input = req.body ?? {};
+        const people = Number(input.people);
+        const userId = input.user_id ?? null;
+        let temporaryName = input.temporary_name ?? null;
+        let temporaryPhone = input.temporary_phone ?? null;
+
+        if (!UUID_REGEX.test(slotId)) {
+            return res.status(422).json({ errors: [{ field: 'slotId', message: 'slotId must be a valid UUID' }] });
+        }
+        if (!['number', 'string'].includes(typeof input.people) || !Number.isSafeInteger(people) || people <= 0) {
+            return res.status(422).json({ errors: [{ field: 'people', message: 'people must be a positive integer' }] });
+        }
+
+        if (userId !== null) {
+            if (typeof userId !== 'string' || !UUID_REGEX.test(userId)) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'user_id must be a valid UUID' }] });
+            }
+            if (temporaryName !== null || temporaryPhone !== null) {
+                return res.status(422).json({ errors: [{ field: 'user_id', message: 'Provide either user_id or temporary contact details, not both' }] });
+            }
+        } else {
+            if (typeof temporaryName !== 'string' || !temporaryName.trim()) {
+                return res.status(422).json({ errors: [{ field: 'temporary_name', message: 'temporary_name is required when user_id is not provided' }] });
+            }
+            temporaryName = temporaryName.trim();
+            if (temporaryPhone !== null) {
+                if (typeof temporaryPhone !== 'string') {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+                temporaryPhone = temporaryPhone.trim() || null;
+                if (temporaryPhone !== null && !/^\+?[0-9 ]{6,20}$/.test(temporaryPhone)) {
+                    return res.status(422).json({ errors: [{ field: 'temporary_phone', message: 'Phone number is not valid' }] });
+                }
+            }
+        }
+
+        // Optional requirements of the party: one entry per subset of the party, each with an allergies flag
+        const requirements = parseRequirements(req.body.requirements);
+        if (requirements === undefined || requirements.length > people) {
+            return res.status(422).json({ errors: [{ field: 'requirements', message: `requirements must be a list of at most ${people} items, each with a boolean allergies and a non-empty description of at most ${MAX_REQUIREMENTS_LENGTH} characters` }] });
+        }
+
+        const reservation = await ReservationDAO.saveEmployeeReservation({
+            slotId, people, userId, temporaryName, temporaryPhone, requirements
+        });
+        res.status(201).json(reservation);
+    } catch (error) {
+        if (error.message === "Slot not found" || error.message === "Hiker not found") {
+            return res.status(404).json({ error: error.message });
+        }
+        if (
+            error.message === "You already have a reservation for this time slot" ||
+            error.message === "The slot is being booked by other hikers, please try again"
+        ) {
+            return res.status(409).json({ error: error.message });
+        }
+        if (
+            error.message === "Insufficient seats available for this party size" ||
+            error.message === "Reservations must be made before the slot starts" ||
+            error.message === "No tables are assigned to this slot yet."
+        ) {
+            return res.status(400).json({ error: error.message });
+        }
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // GET /api/reservations/:reservationId
 // Details of the booking confirmation (MH-03), only for the hiker who made the reservation
 router.get('/reservations/:reservationId', isHiker, async (req, res) => {
@@ -165,15 +236,15 @@ router.get('/reservations/:reservationId', isHiker, async (req, res) => {
 router.put('/reservations/:reservationId', isHiker, async (req, res) => {
     try {
         const { reservationId } = req.params;
-        const slotId = typeof req.body.slot_id === 'string' ? req.body.slot_id.toLowerCase() : req.body.slot_id; 
+        const slotId = typeof req.body.slot_id === 'string' ? req.body.slot_id.toLowerCase() : req.body.slot_id;
         const people = Number(req.body.people);
         const requirements = req.body.requirements === undefined ? undefined : parseRequirements(req.body.requirements);
 
         const errors = [];
-        if(!UUID_REGEX.test(reservationId)) {
-            errors.push({field: 'reservationId', message: 'reservationId must be a valid UUID'});  
+        if (!UUID_REGEX.test(reservationId)) {
+            errors.push({ field: 'reservationId', message: 'reservationId must be a valid UUID' });
         }
-        
+
         if (typeof slotId !== 'string' || !UUID_REGEX.test(slotId)) {
             errors.push({ field: 'slot_id', message: 'slot_id must be a valid UUID' });
         }
@@ -231,6 +302,15 @@ router.post('/reservations/:reservationId/confirmation', isHiker, async (req, re
         }
 
         res.status(200).json({ message: `Confirmation email sent to ${details.hiker.email}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reservations/user/active', isHiker, async (req, res) => {
+    try {
+        const reservations = await ReservationDAO.getActiveReservationsForUser(req.user.user_id);
+        res.status(200).json(reservations);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

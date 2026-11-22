@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* toast notifications (components/popup) */
 @theme {
   --animate-toast-in: toast-in 0.25s ease-out;
   --animate-toast-out: toast-out 0.2s ease-in forwards;
@@ -28,4 +27,25 @@ html, body, #root {
   background-color: #f9fafb;
   width: 100%;
   height: 100%;
+}
+
+/*
+ * 16px on laptops and monitors (up to 2560px wide). Above that, the rem-based
+ * layout, spacing and fonts grow quickly for presentation screens:
+ * 2560px -> 16px, 3200px -> 30px, 3840px -> 45px, capped at 56px.
+ */
+html {
+  font-size: clamp(16px, calc(2.25vw - 41.6px), 56px);
+}
+
+/* Wider content containers (max-w-*) on presentation screens only. */
+@media (min-width: 2561px) {
+  :root {
+    --container-md: 32rem;
+    --container-xl: 42rem;
+    --container-3xl: 60rem;
+    --container-4xl: 68rem;
+    --container-5xl: 80rem;
+    --container-6xl: 90rem;
+  }
 }
