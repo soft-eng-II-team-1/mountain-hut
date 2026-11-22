@@ -60,27 +60,7 @@ $$
 
 | File                                   | % Stmts   | % Branch  | % Funcs   | % Lines  |
 | -------------------------------------- | --------- | --------- | --------- | -------- |
-| **All files**                          | **93.47** | **90.79** | **92.79** | **94.1** |
-| &ensp;config                           | 86.36     | 87.5      | 75        | 86.36    |
-| &ensp;&ensp;mailer.js                  | 86.36     | 87.5      | 75        | 86.36    |
-| &ensp;dao                              | 89.67     | 84.21     | 92.3      | 91.54    |
-| &ensp;&ensp;ReservationDAO.js          | 100       | 95.65     | 100       | 100      |
-| &ensp;&ensp;SlotDAO.js                 | 82.82     | 73.68     | 82.6      | 85.71    |
-| &ensp;&ensp;TableDAO.js                | 100       | 100       | 100       | 100      |
-| &ensp;&ensp;UserDAO.js                 | 80.76     | 80        | 100       | 84       |
-| &ensp;&ensp;transaction.js             | 100       | 100       | 100       | 100      |
-| &ensp;middlewares                      | 86.11     | 81.81     | 85.71     | 86.11    |
-| &ensp;&ensp;auth.js                    | 82.14     | 80        | 80        | 82.14    |
-| &ensp;&ensp;validateParams.js          | 100       | 100       | 100       | 100      |
-| &ensp;routes                           | 97.57     | 100       | 93.54     | 97.56    |
-| &ensp;&ensp;auth.js                    | 100       | 100       | 100       | 100      |
-| &ensp;&ensp;reservations.js            | 100       | 100       | 100       | 100      |
-| &ensp;&ensp;slots.js                   | 89.58     | 100       | 81.81     | 89.36    |
-| &ensp;&ensp;tables.js                  | 100       | 100       | 100       | 100      |
-| &ensp;&ensp;warden.js                  | 100       | 100       | 100       | 100      |
-| &ensp;services                         | 100       | 94.73     | 100       | 100      |
-| &ensp;&ensp;reservationConfirmation.js | 100       | 88.88     | 100       | 100      |
-| &ensp;&ensp;tableAssignment.js         | 100       | 100       | 100       | 100      |
+| **All files**                          | **00000** | **00000** | **00000** | **0000** |
 
 - Integration testing:
   - Total hours estimated: 8h 00m
