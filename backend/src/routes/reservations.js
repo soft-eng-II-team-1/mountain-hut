@@ -236,4 +236,13 @@ router.post('/reservations/:reservationId/confirmation', isHiker, async (req, re
     }
 });
 
+router.get('/reservations/user/active', isHiker, async (req, res) => {
+    try {
+        const reservations = await ReservationDAO.getActiveReservationsForUser(req.user.user_id);
+        res.status(200).json(reservations);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

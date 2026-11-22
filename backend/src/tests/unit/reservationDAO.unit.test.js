@@ -18,7 +18,7 @@ const tx = {
 const prismaMock = {
     ...tx,
     slot: { findUnique: jest.fn() },
-    reservation: { findUnique: jest.fn() },
+    reservation: { findUnique: jest.fn(), findMany: jest.fn() },
     $transaction: jest.fn(),
 };
 
@@ -393,6 +393,42 @@ describe('ReservationDAO.getReservationDetails', () => {
                 { table_id: 'id-T2', number: 'T2', seats_reserved: 2 },
                 { table_id: 'id-T10', number: 'T10', seats_reserved: 2 },
             ],
+        });
+    });
+
+    describe('ReservationDAO.getActiveReservationsForUser', () => {
+        it('queries future reservations of only the requested user and includes details', async () => {
+            const reservations = [{ reservation_id: 'res-100', people: 2 }];
+            prismaMock.reservation.findMany.mockResolvedValue(reservations);
+
+            const result = await ReservationDAO.getActiveReservationsForUser(USER_ID);
+
+            expect(prismaMock.reservation.findMany).toHaveBeenCalledWith({
+                where: {
+                    user_id: USER_ID,
+                    slot: {
+                        date_time_start: { gte: expect.any(Date) },
+                    },
+                },
+                include: {
+                    slot: true,
+                    user: { select: { user_id: true, name: true, surname: true, email: true } },
+                    reservation_table: { include: { table: true } },
+                    reservation_requirement: {
+                        select: { allergies: true, description: true },
+                        orderBy: [{ allergies: 'desc' }, { description: 'asc' }],
+                    },
+                },
+            });
+            expect(result).toBe(reservations);
+        });
+
+        it('returns an empty array when the user has no future reservations', async () => {
+            prismaMock.reservation.findMany.mockResolvedValue([]);
+
+            const result = await ReservationDAO.getActiveReservationsForUser(USER_ID);
+
+            expect(result).toEqual([]);
         });
     });
 });

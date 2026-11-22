@@ -7,6 +7,7 @@ const reservationDaoMock = {
     checkAvailability: jest.fn(),
     saveReservation: jest.fn(),
     getReservationDetails: jest.fn(),
+    getActiveReservationsForUser: jest.fn(),
 };
 
 // Confirmation service mock: no email is built or sent
@@ -42,6 +43,7 @@ const availabilityUrl = `/api/slots/${SLOT_ID}/availability`;
 const bookingUrl = `/api/slots/${SLOT_ID}/reservations`;
 const detailsUrl = `/api/reservations/${RESERVATION_ID}`;
 const resendUrl = `/api/reservations/${RESERVATION_ID}/confirmation`;
+const activeReservationsUrl = '/api/reservations/user/active';
 
 const availability = {
     available: true,
@@ -433,5 +435,37 @@ describe('POST /api/reservations/:reservationId/confirmation', () => {
         await request(app).post(resendUrl).set('x-test-role', 'hiker').expect(500);
 
         expect(confirmationMock.sendReservationConfirmation).not.toHaveBeenCalled();
+    });
+});
+
+describe('GET /api/reservations/user/active', () => {
+    it('responds 401 if not logged in', async () => {
+        await request(app).get(activeReservationsUrl).expect(401);
+
+        expect(reservationDaoMock.getActiveReservationsForUser).not.toHaveBeenCalled();
+    });
+
+    it.each(['employee', 'warden'])('responds 403 if logged in as %s', async (role) => {
+        await request(app).get(activeReservationsUrl).set('x-test-role', role).expect(403);
+
+        expect(reservationDaoMock.getActiveReservationsForUser).not.toHaveBeenCalled();
+    });
+
+    it('returns the active reservations of the logged hiker', async () => {
+        const activeReservations = [details()];
+        reservationDaoMock.getActiveReservationsForUser.mockResolvedValue(activeReservations);
+
+        const res = await request(app).get(activeReservationsUrl).set('x-test-role', 'hiker').expect(200);
+
+        expect(res.body).toEqual(activeReservations);
+        expect(reservationDaoMock.getActiveReservationsForUser).toHaveBeenCalledWith(USER_ID);
+    });
+
+    it('responds 500 on unexpected DAO errors', async () => {
+        reservationDaoMock.getActiveReservationsForUser.mockRejectedValue(new Error('DB down'));
+
+        const res = await request(app).get(activeReservationsUrl).set('x-test-role', 'hiker').expect(500);
+
+        expect(res.body).toEqual({ error: 'DB down' });
     });
 });
