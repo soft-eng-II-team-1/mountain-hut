@@ -180,8 +180,11 @@ describe('GET /api/reservations/user/active', () => {
 });
 
 describe('GET /api/slots/:slotId/availability', () => {
-    it('responds 401 if not logged in', async () => {
-        await request(app).get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(401);
+    it('returns availability without logging in', async () => {
+        const res = await request(app).get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(200);
+
+        expect(res.body.available).toBe(true);
+        expect(res.body.totalAvailableSeats).toBe(12);
     });
 
     it('returns the free seats of the slot', async () => {
@@ -218,6 +221,17 @@ describe('GET /api/slots/:slotId/availability', () => {
     it('responds 404 if the slot has no tables', async () => {
         const agent = await loginAs('hiker5');
         await agent.get(`/api/slots/${slotIds.noTables}/availability?partySize=2`).expect(404);
+    });
+
+    it('responds 404 if the slot does not exist', async () => {
+        const agent = await loginAs('hiker5');
+        await agent.get(`/api/slots/${crypto.randomUUID()}/availability?partySize=2`).expect(404);
+    });
+
+    it('responds 500 on database error', async () => {
+        const agent = await loginAs('hiker5');
+        jest.spyOn(prisma.slot, 'findUnique').mockRejectedValueOnce(new Error('DB error'));
+        await agent.get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(500);
     });
 });
 

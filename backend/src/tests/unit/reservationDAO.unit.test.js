@@ -17,6 +17,7 @@ const tx = {
 
 const prismaMock = {
     ...tx,
+    slot: { findUnique: jest.fn() },
     reservation: { findUnique: jest.fn(), findMany: jest.fn() },
     $transaction: jest.fn(),
 };
@@ -67,6 +68,7 @@ beforeEach(() => {
 
 describe('ReservationDAO.checkAvailability', () => {
     it('subtracts the reserved seats from each table', async () => {
+        tx.slot.findUnique.mockResolvedValue({ slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() });
         tx.slot_table.findMany.mockResolvedValue(slotTables(['T1', 4], ['T2', 6]));
         tx.reservation_table.findMany.mockResolvedValue(reserved(['T1', 1], ['T2', 2], ['T2', 1]));
 
@@ -81,6 +83,7 @@ describe('ReservationDAO.checkAvailability', () => {
     });
 
     it('does not return full tables', async () => {
+        tx.slot.findUnique.mockResolvedValue({ slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() });
         tx.slot_table.findMany.mockResolvedValue(slotTables(['T1', 2], ['T2', 4]));
         tx.reservation_table.findMany.mockResolvedValue(reserved(['T1', 2]));
 
@@ -90,6 +93,7 @@ describe('ReservationDAO.checkAvailability', () => {
     });
 
     it('is available when the party equals the free seats', async () => {
+        tx.slot.findUnique.mockResolvedValue({ slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() });
         tx.slot_table.findMany.mockResolvedValue(slotTables(['T1', 4], ['T2', 2]));
         tx.reservation_table.findMany.mockResolvedValue(reserved(['T1', 1]));
 
@@ -100,15 +104,18 @@ describe('ReservationDAO.checkAvailability', () => {
     });
 
     it('is not available when the party exceeds the free seats by one', async () => {
+        const slot = { slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() };
+        tx.slot.findUnique.mockResolvedValue(slot);
         tx.slot_table.findMany.mockResolvedValue(slotTables(['T1', 4], ['T2', 2]));
         tx.reservation_table.findMany.mockResolvedValue(reserved(['T1', 1]));
 
         const result = await ReservationDAO.checkAvailability(SLOT_ID, 6, tx);
 
-        expect(result).toEqual({ available: false, totalAvailableSeats: 5, availableTables: [] });
+        expect(result).toEqual({ available: false, slot, suggestedTables: [], totalAvailableSeats: 5, availableTables: [] });
     });
 
     it('throws if the slot has no tables', async () => {
+        tx.slot.findUnique.mockResolvedValue({ slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() });
         tx.slot_table.findMany.mockResolvedValue([]);
 
         await expect(ReservationDAO.checkAvailability(SLOT_ID, 1, tx))
@@ -116,6 +123,7 @@ describe('ReservationDAO.checkAvailability', () => {
     });
 
     it('uses the global prisma client when no transaction is given', async () => {
+        prismaMock.slot.findUnique.mockResolvedValue({ slot_id: SLOT_ID, date_time_start: new Date(), date_time_end: new Date() });
         prismaMock.slot_table.findMany.mockResolvedValue(slotTables(['T1', 4]));
         prismaMock.reservation_table.findMany.mockResolvedValue([]);
 
@@ -124,6 +132,12 @@ describe('ReservationDAO.checkAvailability', () => {
         expect(prismaMock.slot_table.findMany).toHaveBeenCalledWith(
             expect.objectContaining({ where: { slot_id: SLOT_ID } }),
         );
+    });
+
+    it('throws if the slot does not exist', async () => {
+        tx.slot.findUnique.mockResolvedValue(null);
+        await expect(ReservationDAO.checkAvailability(SLOT_ID, 1, tx))
+            .rejects.toThrow('Slot not found');
     });
 });
 
@@ -258,7 +272,8 @@ describe('ReservationDAO.saveReservation - business rules', () => {
 
     it('throws if assignTables returns null', async () => {
         setupValidBooking();
-        mockAssignTables.mockReturnValueOnce(null);
+        // assignTables is called twice: for the preview in checkAvailability (MH-04) and for the booking
+        mockAssignTables.mockReturnValue(null);
 
         await expect(ReservationDAO.saveReservation(USER_ID, SLOT_ID, 2))
             .rejects.toThrow('Insufficient seats available for this party size');

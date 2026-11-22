@@ -47,4 +47,17 @@ const isWarden = (req, res, next) => {
     return next();
 };
 
-export { isLoggedIn, isHiker, isEmployee, isWarden, isStaff };
+//MH-07: a hiker created by the staff must change the generated password before using the system
+//only /api/auth/* stays reachable (login, logout, user, password change and recovery)
+const requirePasswordChange = (req, res, next) => {
+    if (req.isAuthenticated() && req.user.first_login && !req.path.startsWith('/api/auth')) {
+        return res.status(403).json({
+            error: 'Password change required',
+            code: 'PASSWORD_CHANGE_REQUIRED'
+        });
+    }
+    return next();
+};
+
+export { isLoggedIn, isHiker, isEmployee, isWarden, isStaff, requirePasswordChange };
+
