@@ -327,6 +327,7 @@ describe('ReservationDAO.getReservationDetails', () => {
                 slot: true,
                 user: { select: { user_id: true, name: true, surname: true, email: true } },
                 reservation_table: { include: { table: true } },
+                reservation_requirement: { select: { allergies: true, description: true }, orderBy: [{ allergies: 'desc' }, { description: 'asc' }] },
             },
         });
         expect(result).toBeNull();
@@ -336,7 +337,8 @@ describe('ReservationDAO.getReservationDetails', () => {
         prismaMock.reservation.findUnique.mockResolvedValue({
             reservation_id: 'res-100',
             people: 4,
-            requirements: 'Gluten free',
+            has_allergies: false,
+            reservation_requirement: [{ allergies: false, description: 'Gluten free' }],
             slot: {
                 slot_id: SLOT_ID,
                 date_time_start: new Date('2026-07-20T12:00:00Z'),
@@ -359,7 +361,8 @@ describe('ReservationDAO.getReservationDetails', () => {
         expect(result).toEqual({
             reservation_id: 'res-100',
             people: 4,
-            requirements: 'Gluten free',
+            requirements: [{ allergies: false, description: 'Gluten free' }],
+            has_allergies: false,
             slot: {
                 slot_id: SLOT_ID,
                 date_time_start: new Date('2026-07-20T12:00:00Z'),

@@ -28,7 +28,7 @@ export default function userDAO() {
                             resolve(false);
                         }
                         else {
-                            resolve({ user_id: user.user_id, email: user.email, role: user.role });
+                            resolve({ user_id: user.user_id, email: user.email, role: user.role, first_login: user.first_login });
                         }
                     }
                 });
@@ -40,8 +40,9 @@ export default function userDAO() {
 
     //create user function
     //default role is hiker, but can be set to employee if needed
+    //first_login = true forces the user to change the password at the next login (accounts created by the staff, MH-07)
     //returns null if user already exists, otherwise returns the created user
-    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker'}) => {
+    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker', first_login = false}) => {
         const salt = crypto.randomBytes(16).toString('hex');
 
         const hash = await new Promise((resolve, reject) => {
@@ -63,12 +64,13 @@ export default function userDAO() {
                     notes: notes || null,
                     emergency_contact: emergency_contact || null,
                     hash,
-                    salt
+                    salt,
+                    first_login
                 }
             });
             return { user_id: user.user_id, email: user.email, role: user.role };
         } catch (error) {
-            if(error.code === 'P2002' && (!error.meta?.target || String(error.meta.target).includes('email'))) {
+            if (error.code === 'P2002' && (!error.meta?.target || String(error.meta.target).includes('email'))) {
                 return null;
             }
             throw error;
@@ -115,6 +117,198 @@ export default function userDAO() {
             select: { user_id: true, name: true, surname: true, email: true, phone: true },
             orderBy: [{ surname: 'asc' }, { name: 'asc' }],
             take: MAX_HIKER_SEARCH_RESULTS,
+        });
+    }
+
+    this.changeUserPassword = async (email, currentPassword, newPassword) => {
+        //password is changed only if data wasn't changed yet  (hash and salt)
+        const user = await prisma.user.findUnique({
+            where: {
+                email: email
+            }
+        });
+
+        if (!user) {
+            return false;
+        }
+        const currentHash = await new Promise((resolve, reject) => {
+            crypto.scrypt(currentPassword, user.salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey);
+            });
+        });
+        const storedHash = Buffer.from(user.hash, 'hex');
+
+        if (storedHash.length != currentHash.length || !crypto.timingSafeEqual(storedHash, currentHash)) {
+            return false;
+        }            
+
+        const salt = crypto.randomBytes(16).toString('hex');
+
+        const hash = await new Promise((resolve, reject) => {
+            crypto.scrypt(newPassword, salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey.toString('hex'));
+            });
+        });
+
+        return prisma.$transaction(async (transaction) => {
+            //if a recovery (or another change) replaced it in the meantime, this request fails
+            const updated = await transaction.user.updateMany({
+                where: {
+                    user_id: user.user_id,
+                    hash: user.hash,
+                    salt: user.salt
+                },
+                data: {
+                    hash,
+                    salt,
+                    first_login: false
+                }
+            });
+
+            if (updated.count != 1) {
+                return false;
+            }
+
+            //password change makes any outstanding recovery code useless
+            await transaction.otp_user.deleteMany({
+                where: {
+                    user_id: user.user_id
+                }
+            });
+
+            return true;
+        });
+    }
+
+    this.saveRecoveryCode = async (email, recoveryCode) => {
+        try {
+            const user = await prisma.user.findUnique({
+                where: {
+                    email: email
+                }
+            });
+
+            if (!user) {
+                return false;
+            }
+
+            const salt = crypto.randomBytes(16).toString('hex');
+
+            const hash = await new Promise((resolve, reject) => {
+                crypto.scrypt(recoveryCode, salt, 64, (err, derivedKey) => {
+                    if (err) {
+                        return reject(err);
+                    }
+                    resolve(derivedKey.toString('hex'));
+                });
+            });
+
+            const now = new Date();
+            const tenMinutesFromNow = new Date(now.getTime() + 10 * 60 * 1000);
+
+            await prisma.otp_user.upsert({
+                where: { user_id: user.user_id },
+                create: {
+                    otp_id: crypto.randomUUID(),
+                    user_id: user.user_id,
+                    hash,
+                    salt,
+                    created_at: now,
+                    expires_at: tenMinutesFromNow
+                },
+                update: {
+                    hash,
+                    salt,
+                    created_at: now,
+                    expires_at: tenMinutesFromNow
+                }
+            });
+
+            return true;
+        } catch (error) {
+            throw error;
+        }
+    }
+
+    this.resetPasswordWithRecoveryCode = async (email, recoveryCode, newPassword) => {
+        const user = await prisma.user.findUnique({
+            where: {
+                email: email
+            }
+        });
+
+        if (!user) {
+            return false;
+        }
+
+        const recoveryCredential = await prisma.otp_user.findUnique({
+            where: {
+                user_id: user.user_id
+            }
+        });
+        const now = new Date();
+
+        if (!recoveryCredential || recoveryCredential.expires_at <= now) {
+            return false;
+        }
+
+        const recoveryCodeHash = await new Promise((resolve, reject) => {
+            crypto.scrypt(recoveryCode, recoveryCredential.salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey);
+            });
+        });
+        const storedRecoveryCodeHash = Buffer.from(recoveryCredential.hash, 'hex');
+
+        if (storedRecoveryCodeHash.length != recoveryCodeHash.length || !crypto.timingSafeEqual(storedRecoveryCodeHash, recoveryCodeHash)) {
+            return false;
+        }
+
+        const newSalt = crypto.randomBytes(16).toString('hex');
+        const newHash = await new Promise((resolve, reject) => {
+            crypto.scrypt(newPassword, newSalt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey.toString('hex'));
+            });
+        });
+
+        return prisma.$transaction(async (transaction) => {
+            const consumedCredential = await transaction.otp_user.deleteMany({
+                where: {
+                    otp_id: recoveryCredential.otp_id,
+                    user_id: user.user_id,
+                    hash: recoveryCredential.hash,
+                    salt: recoveryCredential.salt,
+                    expires_at: { gt: new Date() }
+                }
+            });
+
+            if (consumedCredential.count != 1) {
+                return false;
+            }
+
+            await transaction.user.update({
+                where: {
+                    user_id: user.user_id
+                },
+                data: {
+                    hash: newHash,
+                    salt: newSalt,
+                    first_login: false
+                }
+            });
+
+            return true;
         });
     }
 }

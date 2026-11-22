@@ -168,6 +168,51 @@
       }
     },
     "/api/hikers": {
+      "post": {
+        "summary": "Create a hiker account (employee or warden)",
+        "description": "MH-07. Creates a full hiker account for a hiker that books by phone or at the hut. The password is randomly generated and returned only in this response, so the employee can tell it to the hiker. The hiker must change it at the first login (first_login = true) and can always recover it by email.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HikerInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Hiker created. The response is sent with Cache-Control: no-store because it contains the generated password",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedHiker"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "Email already registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
       "get": {
         "summary": "Search registered hikers (employee or warden)",
         "description": "MH-07. Finds a hiker already registered, so that the staff can reserve on their behalf (phone call, party arriving at the hut). At least one criterion is required; the given criteria are combined in AND. email is unique, so it is matched exactly (case-insensitive) and returns at most one hiker. name and phone are partial matches and can return several hikers. Only users with role hiker are returned, ordered by surname and name, at most 20.",
@@ -466,7 +511,7 @@
         }
       }
     },
-        "/api/slots/available": {
+    "/api/slots/available": {
       "get": {
         "summary": "List the slots a hiker can book for a party in a time range (any logged-in user)",
         "description": "Returns the slots that start in [from, to), start at least 2 hours from now and have at least partySize free seats, ordered by start time. ",
@@ -528,7 +573,6 @@
         }
       }
     },
-
     "/api/slots/{slot_id}": {
       "parameters": [
         {
@@ -831,7 +875,120 @@
             "$ref": "#/components/responses/ValidationError"
           }
         },
-        "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables."
+        "description": "Only hikers can book. The party is seated at one table if possible, otherwise over the fewest tables. Optional party requirements can be given as a list (at most `people` items), each with its own allergies flag and description; missing, null or [] means no requirements. Returns 422 if requirements is not a list, has more items than people, an item is not an object, allergies is not a boolean, or a description is empty or longer than 500 characters after trimming."
+      }
+    },
+    "/api/reservations/{reservation_id}": {
+      "parameters": [
+        {
+          "name": "reservation_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "summary": "Details of a reservation of the logged hiker",
+        "description": "Only the hiker who made the reservation.",
+        "responses": {
+          "200": {
+            "description": "Reservation details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Reservation not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "put": {
+        "summary": "Change a reservation (slot, party size, requirements)",
+        "description": "Only the hiker who made the reservation. Allowed up to 48 hours before the current slot starts; the new slot must start at least 2 hours from now (same rule as booking). The booking reference does not change. Tables are kept whenever possible; they are reassigned only when the slot changes or the party grows beyond the free seats of its current tables. A confirmation email is sent only if something changed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReservationUpdateInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Reservation updated (or unchanged, see 'changed')",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReservationUpdateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Less than 48 hours before the current slot, new slot starting in less than 2 hours, insufficient seats, or no tables assigned to the new slot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Reservation or slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The hiker already has a reservation for the new slot, or the slot was being booked concurrently (retry)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
       }
     }
   },
@@ -929,6 +1086,67 @@
           }
         }
       },
+      "HikerInput": {
+        "type": "object",
+        "description": "Data of a hiker account created by the staff. The password is not sent: it is generated by the server",
+        "required": [
+          "name",
+          "surname",
+          "email"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 50,
+            "example": "Anna"
+          },
+          "surname": {
+            "type": "string",
+            "maxLength": 50,
+            "example": "Bianchi"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "anna@example.com"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "+393331234567"
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 256,
+            "example": "Vegetarian"
+          },
+          "emergency_contact": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100,
+            "example": "Mario Rossi - +391234567890"
+          }
+        }
+      },
+      "CreatedHiker": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/User"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "generated_password": {
+                "type": "string",
+                "format": "password",
+                "description": "Returned only once, never stored in clear text. Must be changed by the hiker at the first login",
+                "example": "Xk7pQm2RtA"
+              }
+            }
+          }
+        ]
+      },
       "TableInput": {
         "type": "object",
         "required": [
@@ -946,6 +1164,25 @@
           }
         }
       },
+      "Requirement": {
+        "type": "object",
+        "required": [
+          "allergies",
+          "description"
+        ],
+        "properties": {
+          "allergies": {
+            "type": "boolean",
+            "description": "Checked when special care is needed during meal preparation"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Trimmed. Describes the subset of the party and its needs"
+          }
+        }
+      },
       "ReservationInput": {
         "type": "object",
         "required": [
@@ -955,6 +1192,28 @@
           "people": {
             "type": "integer",
             "example": 4
+          },
+          "requirements": {
+            "type": "array",
+            "nullable": true,
+            "description": "Optional, at most `people` items. Missing or null means no requirements",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            },
+            "example": [
+              {
+                "allergies": true,
+                "description": "1 vegan, peanut allergy"
+              },
+              {
+                "allergies": true,
+                "description": "1 shellfish allergy"
+              },
+              {
+                "allergies": false,
+                "description": "2 vegetarians"
+              }
+            ]
           }
         }
       },
@@ -968,6 +1227,15 @@
           "people": {
             "type": "integer",
             "example": 4
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            }
+          },
+          "has_allergies": {
+            "type": "boolean"
           },
           "slot_id": {
             "type": "string",
@@ -1165,6 +1433,129 @@
             "example": 10
           }
         }
+      },
+      "ReservationUpdateInput": {
+        "type": "object",
+        "required": [
+          "slot_id",
+          "people",
+          "requirements"
+        ],
+        "properties": {
+          "slot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "people": {
+            "type": "integer",
+            "minimum": 1,
+            "example": 4
+          },
+          "requirements": {
+            "type": "array",
+            "nullable": true,
+            "description": "Replaces the whole list, at most `people` items. null or [] removes all requirements",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            }
+          }
+        }
+      },
+      "ReservationDetails": {
+        "type": "object",
+        "properties": {
+          "reservation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "people": {
+            "type": "integer"
+          },
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Requirement"
+            }
+          },
+          "has_allergies": {
+            "type": "boolean",
+            "description": "True if at least one requirement has allergies"
+          },
+          "slot": {
+            "type": "object",
+            "properties": {
+              "slot_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "date_time_start": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "date_time_end": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "hiker": {
+            "type": "object",
+            "properties": {
+              "user_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "name": {
+                "type": "string"
+              },
+              "surname": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              }
+            }
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "table_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "number": {
+                  "type": "string",
+                  "example": "T2"
+                },
+                "seats_reserved": {
+                  "type": "integer"
+                }
+              }
+            }
+          }
+        }
+      },
+      "ReservationUpdateResult": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReservationDetails"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "changed": {
+                "type": "boolean",
+                "description": "false if the request did not change anything (no email sent)"
+              },
+              "confirmation_sent": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
       }
     },
     "responses": {
