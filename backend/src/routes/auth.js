@@ -116,7 +116,7 @@ router.put('/password', isLoggedIn, changePasswordRules, validateRequest, async 
             if(err) {
                 return next(err);
             }
-            return res.status(200).json(updateUser);
+            return res.status(200).json(updatedUser);
         });
     } catch (err) {
         return next(err);

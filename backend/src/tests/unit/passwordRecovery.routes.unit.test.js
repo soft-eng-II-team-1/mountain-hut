@@ -86,7 +86,10 @@ describe('PUT /api/auth/password', () => {
 
         const res = await changePassword(validChange()).expect(401);
 
-        expect(res.body).toEqual({ error: 'Old credentials are incorrect' });
+        expect(res.body).toEqual({
+            error: 'Old credentials are incorrect',
+            code: 'INVALID_OLD_PASSWORD',
+        });
     });
 
     it.each([

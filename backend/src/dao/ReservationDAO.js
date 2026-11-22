@@ -28,6 +28,8 @@ const toRequirementRows = (requirements) => requirements.map(r => ({
 }));
 
 // order used in every response and in the email: allergies first, so the kitchen sees them at the top
+const REQUIREMENTS_ORDER = [{ allergies: 'desc' }, { description: 'asc' }];
+
 const sortRequirements = (requirements) => [...requirements].sort((a, b) =>
     (b.allergies - a.allergies) || a.description.localeCompare(b.description));
 
