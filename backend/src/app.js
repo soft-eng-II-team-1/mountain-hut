@@ -13,11 +13,13 @@ import { sendEmail } from './config/mailer.js';
 
 import wardenRoutes from './routes/warden.js';
 import slotRoutes from './routes/slots.js';
+import hikerRoutes from './routes/hikers.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
 
 import authRoutes from './routes/auth.js';
+import { requirePasswordChange } from './middlewares/auth.js';
 
 dotenv.config();
 
@@ -68,6 +70,8 @@ app.use(session({
 
 app.use(passport.authenticate('session'));
 
+app.use(requirePasswordChange);
+
 app.use('/api/auth', authRoutes);
 
 // Mounts router.post('/'), put('/:tableId'), delete('/:tableId') at /api/tables
@@ -95,6 +99,8 @@ app.post('/api/test/email', async (req, res) => {
 app.use('/api/warden', wardenRoutes);
 
 app.use('/api/slots', slotRoutes);
+
+app.use('/api/hikers', hikerRoutes);
 
 //error handler 
 app.use((err, req, res, next) => {

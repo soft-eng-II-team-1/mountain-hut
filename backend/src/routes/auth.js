@@ -6,6 +6,7 @@ import passport from 'passport';
 import UserDAO from '../dao/UserDAO.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isLoggedIn } from '../middlewares/auth.js';
+import { hikerProfileRules } from '../middlewares/userRules.js';
 import { sendRecoveryCodeEmail } from '../services/passwordRecovery.js';
 
 const router = express.Router();
@@ -18,13 +19,7 @@ const loginRules = [
 ];
 
 const signupRules = [
-    body('name').trim().notEmpty().withMessage('Name is required')
-        .isLength({ max: 50 }).withMessage('Name is too long'),
-    body('surname').trim().notEmpty().withMessage('Surname is required')
-        .isLength({ max: 50 }).withMessage('Surname is too long'),
-    body('email').trim().toLowerCase().isEmail().withMessage('A valid email is required'),
-    body('phone').optional({ values: 'falsy' }).trim()
-        .matches(/^\+?[0-9 ]{6,20}$/).withMessage('Phone number is not valid'),
+    ...hikerProfileRules,
     body('password').isString()
         .isLength({ min: 8, max: 128 }).withMessage('Password must be 8-128 characters long'),
     body('notes').optional({ values: 'falsy' }).trim().isLength({ max: 256 }).withMessage('Notes are too long'),
@@ -115,7 +110,13 @@ router.put('/password', isLoggedIn, changePasswordRules, validateRequest, async 
         if (!result) {
             return res.status(401).json({ error: 'Old credentials are incorrect' });
         }
-        return res.status(200).end();
+        const updatedUser = {...req.user, first_login: false}; //update session to first_login: false
+        req.login(updatedUser, (err) => {
+            if(err) {
+                return next(err);
+            }
+            return res.status(200).json(updateUser);
+        });
     } catch (err) {
         return next(err);
     }

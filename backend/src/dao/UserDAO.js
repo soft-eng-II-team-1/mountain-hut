@@ -25,7 +25,7 @@ export default function userDAO() {
                             resolve(false);
                         }
                         else {
-                            resolve({ user_id: user.user_id, email: user.email, role: user.role });
+                            resolve({ user_id: user.user_id, email: user.email, role: user.role, first_login: user.first_login });
                         }
                     }
                 });
@@ -37,8 +37,9 @@ export default function userDAO() {
 
     //create user function
     //default role is hiker, but can be set to employee if needed
+    //first_login = true forces the user to change the password at the next login (accounts created by the staff, MH-07)
     //returns null if user already exists, otherwise returns the created user
-    this.createUser = async ({ name, surname, email, phone, notes, emergency_contact, password, role = 'hiker' }) => {
+    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker', first_login = false}) => {
         const salt = crypto.randomBytes(16).toString('hex');
 
         const hash = await new Promise((resolve, reject) => {
@@ -60,7 +61,8 @@ export default function userDAO() {
                     notes: notes || null,
                     emergency_contact: emergency_contact || null,
                     hash,
-                    salt
+                    salt,
+                    first_login
                 }
             });
             return { user_id: user.user_id, email: user.email, role: user.role };
@@ -73,38 +75,69 @@ export default function userDAO() {
     }
 
     this.changeUserPassword = async (email, currentPassword, newPassword) => {
-        try {
-            const user = await this.getUser(email, currentPassword);
-
-            if (!user) {
-                return false;
+        //password is changed only if data wasn't changed yet  (hash and salt)
+        const user = await prisma.user.findUnique({
+            where: {
+                email: email
             }
+        });
 
-            const salt = crypto.randomBytes(16).toString('hex');
-
-            const hash = await new Promise((resolve, reject) => {
-                crypto.scrypt(newPassword, salt, 64, (err, derivedKey) => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve(derivedKey.toString('hex'));
-                });
+        if (!user) {
+            return false;
+        }
+        const currentHash = await new Promise((resolve, reject) => {
+            crypto.scrypt(currentPassword, user.salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey);
             });
+        });
+        const storedHash = Buffer.from(user.hash, 'hex');
 
-            await prisma.user.update({
+        if (storedHash.length != currentHash.length || !crypto.timingSafeEqual(storedHash, currentHash)) {
+            return false;
+        }            
+
+        const salt = crypto.randomBytes(16).toString('hex');
+
+        const hash = await new Promise((resolve, reject) => {
+            crypto.scrypt(newPassword, salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey.toString('hex'));
+            });
+        });
+
+        return prisma.$transaction(async (transaction) => {
+            //if a recovery (or another change) replaced it in the meantime, this request fails
+            const updated = await transaction.user.updateMany({
                 where: {
-                    email: email
+                    user_id: user.user_id,
+                    hash: user.hash,
+                    salt: user.salt
                 },
                 data: {
                     hash,
-                    salt
+                    salt,
+                    first_login: false
+                }
+            });
+
+            if (updated.count != 1) {
+                return false;
+            }
+
+            //password change makes any outstanding recovery code useless
+            await transaction.otp_user.deleteMany({
+                where: {
+                    user_id: user.user_id
                 }
             });
 
             return true;
-        } catch (error) {
-            throw error;
-        }
+        });
     }
 
     this.saveRecoveryCode = async (email, recoveryCode) => {
@@ -224,7 +257,8 @@ export default function userDAO() {
                 },
                 data: {
                     hash: newHash,
-                    salt: newSalt
+                    salt: newSalt,
+                    first_login: false
                 }
             });
 
