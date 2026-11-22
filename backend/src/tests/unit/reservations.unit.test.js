@@ -269,6 +269,7 @@ describe('POST /api/slots/:slotId/reservations - party requirements (MH-03)', ()
 
     it.each([
         ['with a description longer than 500 characters', [{ allergies: false, description: 'x'.repeat(501) }]],
+        ['a text (format used before MH-05)', 'Nut allergy'],
         ['a number', 42],
         ['a boolean', true],
         ['a list of texts', ['nuts']],

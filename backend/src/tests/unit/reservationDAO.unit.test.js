@@ -342,7 +342,7 @@ describe('ReservationDAO.getReservationDetails', () => {
                 slot: true,
                 user: { select: { user_id: true, name: true, surname: true, email: true } },
                 reservation_table: { include: { table: true } },
-                reservation_requirement: { select: { allergies: true, description: true }, orderBy: [{ allergies: 'desc' }, { description: 'asc' }] },
+                reservation_requirement: { select: { allergies: true, description: true } },
             },
         });
         expect(result).toBeNull();

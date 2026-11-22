@@ -27,8 +27,9 @@ const toRequirementRows = (requirements) => requirements.map(r => ({
     id: crypto.randomUUID(), allergies: r.allergies, description: r.description
 }));
 
-// same order used when reading: allergies first, so the kitchen sees them at the top
-const REQUIREMENTS_ORDER = [{ allergies: 'desc' }, { description: 'asc' }];
+// order used in every response and in the email: allergies first, so the kitchen sees them at the top
+const sortRequirements = (requirements) => [...requirements].sort((a, b) =>
+    (b.allergies - a.allergies) || a.description.localeCompare(b.description));
 
 
 class ReservationDAO {
@@ -209,7 +210,7 @@ class ReservationDAO {
 
         return {
             ...newReservation,
-            requirements,
+            requirements: sortRequirements(requirements),
             tables: tableAssignments
         };
     }
@@ -380,7 +381,7 @@ class ReservationDAO {
                 slot: true,
                 user: { select: { user_id: true, name: true, surname: true, email: true } },
                 reservation_table: { include: { table: true } },
-                reservation_requirement: { select: { allergies: true, description: true }, orderBy: REQUIREMENTS_ORDER }
+                reservation_requirement: { select: { allergies: true, description: true } }
             }
         });
         if (!reservation) {
@@ -390,8 +391,9 @@ class ReservationDAO {
         return {
             reservation_id: reservation.reservation_id,
             people: reservation.people,
-            requirements: reservation.reservation_requirement,
-            has_allergies: reservation.has_allergies,
+            requirements: sortRequirements(reservation.reservation_requirement),
+            // derived from the list, so it can never disagree with it (e.g. rows migrated with the flag but no text)
+            has_allergies: reservation.reservation_requirement.some(r => r.allergies),
             slot: {
                 slot_id: reservation.slot.slot_id,
                 date_time_start: reservation.slot.date_time_start,

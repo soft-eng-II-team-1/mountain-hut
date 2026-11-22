@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import morgan from 'morgan';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import passport from 'passport';
 import LocalStrategy from 'passport-local';
 import session from 'express-session';
@@ -105,6 +107,21 @@ app.use('/api/warden', wardenRoutes);
 app.use('/api/slots', slotRoutes);
 
 app.use('/api/hikers', hikerRoutes);
+
+if (process.env.SERVE_FRONTEND === 'true') {
+  const frontendDirectory = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '../public',
+  );
+  app.use(express.static(frontendDirectory));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api')) {
+      return next();
+    }
+
+    res.sendFile(path.join(frontendDirectory, 'index.html'));
+  });
+}
 
 //error handler 
 app.use((err, req, res, next) => {
