@@ -3,7 +3,6 @@ import {Link, useLocation, useNavigate} from "react-router";
 import FormCard from "../components/form/FormCard";
 import TextField from "../components/form/TextField";
 import SubmitButton from "../components/form/SubmitButton";
-import InfoNote from "../components/form/InfoNote";
 import {useAuthStore} from "../../../store";
 import {toast} from "../../../components/popup";
 import {STAFF_ROLES} from "../../../types";
@@ -38,6 +37,11 @@ export default function LoginPage() {
       const user = await login(email.trim(), password);
       toast.success("You are now logged in.", {title: "Welcome back!"});
       // back to the protected page that sent us here, else staff land on the dashboard
+      // MH-07: accounts created by the staff must replace the temporary password first
+      if (user.first_login) {
+        navigate("/update-password", {replace: true});
+        return;
+      }
       const from = (location.state as {from?: string} | null)?.from;
       navigate(from ?? (STAFF_ROLES.includes(user.role) ? "/admin" : "/"), {
         replace: true,
@@ -85,7 +89,12 @@ export default function LoginPage() {
         <SubmitButton loading={loading}>Login</SubmitButton>
       </FormCard>
 
-      <InfoNote>Hut staff: Your account is managed by the Warden.</InfoNote>
+      <Link
+        to="/forgot-password"
+        className="mx-auto text-md text-[#23404d] underline"
+      >
+        Forgot your Password?
+      </Link>
     </div>
   );
 }

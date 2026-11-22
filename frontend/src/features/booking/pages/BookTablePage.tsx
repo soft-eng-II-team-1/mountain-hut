@@ -1,4 +1,5 @@
 import {useEffect, useState} from "react";
+import {useLocation, useNavigate} from "react-router";
 import {bookTable, getBookableSlots} from "../../../api/reservations";
 import {toast} from "../../../components/popup";
 import {
@@ -9,7 +10,9 @@ import {
   toInputDate,
   type Meal,
 } from "../../../lib/slotTime";
-import type {BookableSlot, Reservation} from "../../../types";
+import type {BookableSlot} from "../../../types";
+import ConfirmationEmailNote from "../components/ConfirmationEmailNote";
+import type {PartyRequirementsState} from "./PartyRequirementsPage";
 
 const MIN_GUESTS = 1;
 const MAX_GUESTS = 30;
@@ -27,22 +30,25 @@ const fieldClass =
 const labelClass = "flex flex-col gap-1 text-sm text-[#23404d]";
 
 const stepClass =
-  "flex h-[38px] w-10 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-[#f1f1f1] text-lg text-[#23404d] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50";
+  "flex h-[2.375rem] w-10 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-[#f1f1f1] text-lg text-[#23404d] transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50";
+
+// sent by the home page availability check, to start from the slot the hiker checked
+export type BookTableState = {date: string; guests: number; slotId: string};
 
 export default function BookTablePage() {
-  const [date, setDate] = useState(() => toInputDate(new Date()));
-  const [guests, setGuests] = useState(2);
+  const navigate = useNavigate();
+  const prefill = useLocation().state as BookTableState | null;
+  const [date, setDate] = useState(
+    () => prefill?.date ?? toInputDate(new Date()),
+  );
+  const [guests, setGuests] = useState(prefill?.guests ?? 2);
   const [loaded, setLoaded] = useState<LoadedSlots | null>(null);
   // bumped to load the same day again (e.g. after a booking)
   const [reload, setReload] = useState(0);
   const loadKey = `${date}#${guests}#${reload}`;
   const [chosenMeal, setChosenMeal] = useState<Meal | "">("");
-  const [chosenSlotId, setChosenSlotId] = useState("");
+  const [chosenSlotId, setChosenSlotId] = useState(prefill?.slotId ?? "");
   const [booking, setBooking] = useState(false);
-  const [booked, setBooked] = useState<{
-    reservation: Reservation;
-    slot: BookableSlot;
-  } | null>(null);
 
   // slots of the chosen day that still have room for the party.
   // The backend already hides full slots and slots starting in less than 2 hours (MH-01)
@@ -67,7 +73,13 @@ export default function BookTablePage() {
   const bookable = loading ? [] : loaded.slots;
 
   const meals = [...new Set(bookable.map(mealOf))];
-  const meal = meals.includes(chosenMeal as Meal) ? chosenMeal : meals[0];
+  // with no meal picked yet, follow the chosen slot (e.g. the one checked on the home page)
+  const chosenSlot = bookable.find((s) => s.slot_id === chosenSlotId);
+  const meal = meals.includes(chosenMeal as Meal)
+    ? chosenMeal
+    : chosenSlot
+      ? mealOf(chosenSlot)
+      : meals[0];
   const mealSlots = bookable.filter((s) => mealOf(s) === meal);
   const slot =
     mealSlots.find((s) => s.slot_id === chosenSlotId) ?? mealSlots[0];
@@ -77,21 +89,15 @@ export default function BookTablePage() {
     setBooking(true);
     try {
       const reservation = await bookTable(slot.slot_id, guests);
-      setBooked({reservation, slot});
-      toast.success("Your table is booked!");
+      // MH-05: the hiker completes the booking with the party requirements
+      const state: PartyRequirementsState = {reservation, slot};
+      navigate(`/book/${reservation.reservation_id}/requirements`, {state});
     } catch (err) {
       toast.error((err as Error).message);
       // the free seats may have changed, load them again
       setReload((r) => r + 1);
-    } finally {
       setBooking(false);
     }
-  };
-
-  const resetBooking = () => {
-    setBooked(null);
-    // reload the day so the free seats are current
-    setReload((r) => r + 1);
   };
 
   const emptyMessage = loading
@@ -116,8 +122,7 @@ export default function BookTablePage() {
               value={date}
               min={toInputDate(new Date())}
               onChange={(e) => setDate(e.target.value)}
-              disabled={!!booked}
-              className={`${fieldClass} text-center`}
+                            className={`${fieldClass} text-center`}
             />
           </label>
 
@@ -135,7 +140,7 @@ export default function BookTablePage() {
                 type="button"
                 aria-label="Add a guest"
                 onClick={() => setGuests((g) => Math.min(MAX_GUESTS, g + 1))}
-                disabled={!!booked || guests >= MAX_GUESTS}
+                disabled={guests >= MAX_GUESTS}
                 className={stepClass}
               >
                 +
@@ -144,7 +149,7 @@ export default function BookTablePage() {
                 type="button"
                 aria-label="Remove a guest"
                 onClick={() => setGuests((g) => Math.max(MIN_GUESTS, g - 1))}
-                disabled={!!booked || guests <= MIN_GUESTS}
+                disabled={guests <= MIN_GUESTS}
                 className={stepClass}
               >
                 −
@@ -157,7 +162,7 @@ export default function BookTablePage() {
             <select
               value={meal ?? ""}
               onChange={(e) => setChosenMeal(e.target.value as Meal)}
-              disabled={!!booked || meals.length === 0}
+              disabled={meals.length === 0}
               className={`${fieldClass} cursor-pointer`}
             >
               {meals.length === 0 ? (
@@ -177,7 +182,7 @@ export default function BookTablePage() {
             <select
               value={slot?.slot_id ?? ""}
               onChange={(e) => setChosenSlotId(e.target.value)}
-              disabled={!!booked || mealSlots.length === 0}
+              disabled={mealSlots.length === 0}
               className={`${fieldClass} cursor-pointer`}
             >
               {mealSlots.length === 0 ? (
@@ -201,123 +206,50 @@ export default function BookTablePage() {
         </section>
 
         <section className="flex flex-col rounded-2xl bg-white p-8 shadow-[0_4px_12px_rgba(0,0,0,0.15)]">
-          {booked ? (
-            <BookingConfirmed
-              reservation={booked.reservation}
-              slot={booked.slot}
-              onBookAnother={resetBooking}
-            />
-          ) : (
-            <>
-              <div className="text-center">
-                <h2 className="text-xl font-semibold text-[#cc6000]">
-                  Reservation Summary
-                </h2>
-                <p className="text-sm">Check before confirmation</p>
-              </div>
+          <div className="text-center">
+            <h2 className="text-xl font-semibold text-[#cc6000]">
+              Reservation Summary
+            </h2>
+            <p className="text-sm">Check before confirmation</p>
+          </div>
 
-              <dl className="mt-8 flex flex-col gap-6 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt>Meal</dt>
-                  <dd>{slot ? mealOf(slot) : "—"}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>Guests</dt>
-                  <dd>{guests}</dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt>Date and Time</dt>
-                  <dd>
-                    {slot
-                      ? `${formatDate(slot.date_time_start)}, ${formatTime(slot.date_time_start)}`
-                      : "—"}
-                  </dd>
-                </div>
-              </dl>
+          <dl className="mt-8 flex flex-col gap-6 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt>Meal</dt>
+              <dd>{slot ? mealOf(slot) : "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt>Guests</dt>
+              <dd>{guests}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt>Date and Time</dt>
+              <dd>
+                {slot
+                  ? `${formatDate(slot.date_time_start)}, ${formatTime(slot.date_time_start)}`
+                  : "—"}
+              </dd>
+            </div>
+          </dl>
 
-              {slot && (
-                <p role="status" className="mt-6 text-center text-xs text-green-700">
-                  {slot.free_seats} {slot.free_seats === 1 ? "seat" : "seats"} free
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={handleBook}
-                disabled={!slot || loading || booking}
-                className="mt-4 cursor-pointer self-center rounded-lg bg-[#cc6000] px-6 py-2 text-lg font-semibold text-white shadow-md transition hover:bg-[#b35400] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {booking ? "Booking…" : "Find a Table and Book"}
-              </button>
-            </>
+          {slot && (
+            <p role="status" className="mt-6 text-center text-xs text-green-700">
+              {slot.free_seats} {slot.free_seats === 1 ? "seat" : "seats"} free
+            </p>
           )}
+
+          <button
+            type="button"
+            onClick={handleBook}
+            disabled={!slot || loading || booking}
+            className="mt-4 cursor-pointer self-center rounded-lg bg-[#cc6000] px-6 py-2 text-lg font-semibold text-white shadow-md transition hover:bg-[#b35400] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {booking ? "Finding a table…" : "Find a Table and Book"}
+          </button>
         </section>
       </div>
 
-      <p className="mt-8 flex items-center justify-center gap-2 text-sm">
-        <svg
-          viewBox="0 0 24 24"
-          className="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          aria-hidden="true"
-        >
-          <rect x="3" y="5" width="18" height="14" rx="2" />
-          <path d="m3 7 9 6 9-6" />
-        </svg>
-        A confirmation email will be sent to your address.
-      </p>
-    </div>
-  );
-}
-
-type BookingConfirmedProps = {
-  reservation: Reservation;
-  slot: BookableSlot;
-  onBookAnother: () => void;
-};
-
-function BookingConfirmed({
-  reservation,
-  slot,
-  onBookAnother,
-}: BookingConfirmedProps) {
-  return (
-    <div className="flex flex-1 flex-col text-center">
-      <h2 className="text-xl font-semibold text-[#cc6000]">
-        Table Booked
-      </h2>
-      <p className="text-sm">
-        {mealOf(slot)} on {formatDate(slot.date_time_start)} at{" "}
-        {formatTime(slot.date_time_start)} for {reservation.people}{" "}
-        {reservation.people === 1 ? "guest" : "guests"}.
-      </p>
-
-      <ul className="mt-6 flex flex-col gap-2 text-sm">
-        {reservation.tables.map((t) => (
-          <li
-            key={t.table_id}
-            className="flex justify-between rounded-md border border-gray-300 px-3 py-2"
-          >
-            <span>Table {t.number}</span>
-            <span>
-              {t.seats_reserved} {t.seats_reserved === 1 ? "seat" : "seats"}
-            </span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-3 text-xs text-gray-500">
-        Tables are shared with other parties.
-      </p>
-
-      <button
-        type="button"
-        onClick={onBookAnother}
-        className="mt-auto cursor-pointer self-center rounded-lg border border-[#24414f] px-5 py-1.5 text-xs font-semibold transition hover:bg-[#24414f] hover:text-white"
-      >
-        Book another meal
-      </button>
+      <ConfirmationEmailNote />
     </div>
   );
 }

@@ -62,9 +62,12 @@ export default function Header() {
                     Dashboard
                   </Link>
                 )}
-                <span className="hidden text-sm text-white sm:inline">
+                <Link
+                  to="/profile"
+                  className="hidden text-sm text-white transition hover:text-white/70 sm:inline"
+                >
                   {user.email}
-                </span>
+                </Link>
                 <button
                   type="button"
                   onClick={handleLogout}
