@@ -132,7 +132,8 @@ describe('Booking with a list of party requirements', () => {
     it('saves every requirement with its own allergies flag (user story example)', async () => {
         const res = await book(anna, 'main', 4, STORY_EXAMPLE).expect(201);
 
-        expect(res.body.requirements).toEqual(STORY_EXAMPLE);
+        // same order as the reservation details and the email: allergies first
+        expect(res.body.requirements).toEqual([STORY_EXAMPLE[1], STORY_EXAMPLE[0], STORY_EXAMPLE[2]]);
         const saved = await findSaved(res.body.reservation_id);
         expect(saved.has_allergies).toBe(true);
         expect(sorted(saved.reservation_requirement)).toEqual(sorted(STORY_EXAMPLE));

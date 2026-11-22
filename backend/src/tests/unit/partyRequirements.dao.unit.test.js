@@ -30,6 +30,8 @@ const STORY_EXAMPLE = [
     { allergies: false, description: '2 vegetarians' },
 ];
 const NO_ALLERGIES = [{ allergies: false, description: '2 vegetarians' }];
+// The same list in the order of every response and of the email: allergies first
+const STORY_EXAMPLE_SORTED = [STORY_EXAMPLE[1], STORY_EXAMPLE[0], STORY_EXAMPLE[2]];
 
 // Booking that can be saved: slot in 3 days, one empty table of 6 seats
 const setupBooking = () => {
@@ -105,12 +107,12 @@ describe('ReservationDAO.saveReservation - party requirements', () => {
         expect(createdData().reservation_requirement.create).toEqual([]);
     });
 
-    it('returns the requirements as a list, like the reservation details', async () => {
+    it('returns the requirements in the same order as the reservation details (allergies first)', async () => {
         setupBooking();
 
-        const result = await ReservationDAO.saveReservation(USER_ID, SLOT_ID, 4, STORY_EXAMPLE);
+        const result = await ReservationDAO.saveReservation(USER_ID, SLOT_ID, 4, [...STORY_EXAMPLE].reverse());
 
-        expect(result.requirements).toEqual(STORY_EXAMPLE);
+        expect(result.requirements).toEqual(STORY_EXAMPLE_SORTED);
     });
 
     it('saves no requirements when the booking fails', async () => {
@@ -181,28 +183,22 @@ describe('ReservationDAO.getReservationDetails - party requirements', () => {
         reservation_table: [],
     });
 
-    it('reads the requirements with the allergies first', async () => {
-        prismaMock.reservation.findUnique.mockResolvedValue(reservation([], false));
-
-        await ReservationDAO.getReservationDetails(RES_ID);
-
-        expect(prismaMock.reservation.findUnique).toHaveBeenCalledWith(expect.objectContaining({
-            include: expect.objectContaining({
-                reservation_requirement: {
-                    select: { allergies: true, description: true },
-                    orderBy: [{ allergies: 'desc' }, { description: 'asc' }],
-                },
-            }),
-        }));
-    });
-
-    it('returns the list of requirements and has_allergies', async () => {
-        prismaMock.reservation.findUnique.mockResolvedValue(reservation(STORY_EXAMPLE, true));
+    it('returns the requirements with the allergies first and has_allergies', async () => {
+        prismaMock.reservation.findUnique.mockResolvedValue(reservation([...STORY_EXAMPLE].reverse(), true));
 
         const details = await ReservationDAO.getReservationDetails(RES_ID);
 
-        expect(details.requirements).toEqual(STORY_EXAMPLE);
+        expect(details.requirements).toEqual(STORY_EXAMPLE_SORTED);
         expect(details.has_allergies).toBe(true);
+    });
+
+    it('derives has_allergies from the list, not from the stored flag', async () => {
+        // e.g. a reservation migrated with the flag set but no requirement text
+        prismaMock.reservation.findUnique.mockResolvedValue(reservation([], true));
+
+        const details = await ReservationDAO.getReservationDetails(RES_ID);
+
+        expect(details.has_allergies).toBe(false);
     });
 
     it('returns an empty list when there are no requirements', async () => {
