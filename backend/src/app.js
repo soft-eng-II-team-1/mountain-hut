@@ -8,6 +8,7 @@ import LocalStrategy from 'passport-local';
 import session from 'express-session';
 import tableRoutes from './routes/tables.js';
 import reservationRoutes from './routes/reservations.js';
+import hikerSearchRoutes from './routes/hikerSearch.js';
 
 import { sendEmail } from './config/mailer.js';
 
@@ -76,6 +77,9 @@ app.use('/api/auth', authRoutes);
 
 // Mounts router.post('/'), put('/:tableId'), delete('/:tableId') at /api/tables
 app.use('/api/tables', tableRoutes);
+
+// MH-07: GET /api/hikers (search). POST /api/hikers (creation) has its own router on the same path
+app.use('/api/hikers', hikerSearchRoutes);
 
 // Mounts router.get('/slots/:slotId/availability') and post('/slots/:slotId/reservations') at /api/slots/...
 app.use('/api', reservationRoutes);
