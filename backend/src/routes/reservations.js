@@ -63,7 +63,7 @@ const getOwnReservation = async (req) => {
     return details;
 };
 
-router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
+router.get('/slots/:slotId/availability', async (req, res) => {
     try {
         const { slotId } = req.params;
         const partySize = Number(req.query.partySize);
@@ -84,7 +84,7 @@ router.get('/slots/:slotId/availability', isLoggedIn, async (req, res) => {
 
         res.status(200).json(availability);
     } catch (error) {
-        if (error.message === "No tables are assigned to this slot yet.") {
+        if (error.message === "Slot not found" || error.message === "No tables are assigned to this slot yet.") {
             return res.status(404).json({ error: error.message });
         }
         res.status(500).json({ error: error.message });
@@ -302,6 +302,15 @@ router.post('/reservations/:reservationId/confirmation', isHiker, async (req, re
         }
 
         res.status(200).json({ message: `Confirmation email sent to ${details.hiker.email}` });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+router.get('/reservations/user/active', isHiker, async (req, res) => {
+    try {
+        const reservations = await ReservationDAO.getActiveReservationsForUser(req.user.user_id);
+        res.status(200).json(reservations);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

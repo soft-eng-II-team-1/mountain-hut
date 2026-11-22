@@ -2,6 +2,9 @@ import crypto from 'node:crypto';
 
 import { prisma } from '../../prisma.client.ts'
 
+// MH-07: maximum number of hikers returned by a search (the employee should refine the search beyond this)
+const MAX_HIKER_SEARCH_RESULTS = 20;
+
 export default function userDAO() {
     this.getUser = (email, password) => {
         return new Promise(async (resolve, reject) => {
@@ -25,7 +28,7 @@ export default function userDAO() {
                             resolve(false);
                         }
                         else {
-                            resolve({ user_id: user.user_id, email: user.email, role: user.role });
+                            resolve({ user_id: user.user_id, email: user.email, role: user.role, first_login: user.first_login });
                         }
                     }
                 });
@@ -37,8 +40,9 @@ export default function userDAO() {
 
     //create user function
     //default role is hiker, but can be set to employee if needed
+    //first_login = true forces the user to change the password at the next login (accounts created by the staff, MH-07)
     //returns null if user already exists, otherwise returns the created user
-    this.createUser = async ({ name, surname, email, phone, notes, emergency_contact, password, role = 'hiker' }) => {
+    this.createUser = async({name, surname, email, phone, notes, emergency_contact, password, role = 'hiker', first_login = false}) => {
         const salt = crypto.randomBytes(16).toString('hex');
 
         const hash = await new Promise((resolve, reject) => {
@@ -60,7 +64,8 @@ export default function userDAO() {
                     notes: notes || null,
                     emergency_contact: emergency_contact || null,
                     hash,
-                    salt
+                    salt,
+                    first_login
                 }
             });
             return { user_id: user.user_id, email: user.email, role: user.role };
@@ -72,39 +77,113 @@ export default function userDAO() {
         }
     }
 
-    this.changeUserPassword = async (email, currentPassword, newPassword) => {
-        try {
-            const user = await this.getUser(email, currentPassword);
+    //MH-07: search the hikers already registered, so that an employee can reserve on their behalf
+    //the given criteria (at least one, checked by the route) are combined in AND:
+    // - email: exact match, case-insensitive (email is unique, so at most one hiker)
+    // - name: every word must be contained in the name or in the surname ("Mario Rossi", "rossi mario", "ross")
+    // - phone: partial match on the number without spaces ("333 123" matches "+39 3331234567")
+    //returns the hikers ordered by surname and name, at most MAX_HIKER_SEARCH_RESULTS
+    this.searchHikers = async ({ email, name, phone }) => {
+        const conditions = [{ role: 'hiker' }];
 
-            if (!user) {
-                return false;
-            }
+        if (email) {
+            conditions.push({ email: { equals: email, mode: 'insensitive' } });
+        }
 
-            const salt = crypto.randomBytes(16).toString('hex');
-
-            const hash = await new Promise((resolve, reject) => {
-                crypto.scrypt(newPassword, salt, 64, (err, derivedKey) => {
-                    if (err) {
-                        return reject(err);
-                    }
-                    resolve(derivedKey.toString('hex'));
+        if (name) {
+            const words = name.split(/\s+/).filter(Boolean);
+            for (const word of words) {
+                conditions.push({
+                    OR: [
+                        { name: { contains: word, mode: 'insensitive' } },
+                        { surname: { contains: word, mode: 'insensitive' } },
+                    ]
                 });
-            });
+            }
+        }
 
-            await prisma.user.update({
+        if (phone) {
+            //phone numbers can be saved with spaces: they are ignored on both sides
+            //the route allows only digits and '+', so the pattern contains no LIKE wildcards
+            const pattern = `%${phone.replace(/\s+/g, '')}%`;
+            const rows = await prisma.$queryRaw`
+                SELECT user_id FROM "user"
+                WHERE role = 'hiker' AND REPLACE(phone, ' ', '') LIKE ${pattern}`;
+            conditions.push({ user_id: { in: rows.map((row) => row.user_id) } });
+        }
+
+        return prisma.user.findMany({
+            where: { AND: conditions },
+            select: { user_id: true, name: true, surname: true, email: true, phone: true },
+            orderBy: [{ surname: 'asc' }, { name: 'asc' }],
+            take: MAX_HIKER_SEARCH_RESULTS,
+        });
+    }
+
+    this.changeUserPassword = async (email, currentPassword, newPassword) => {
+        //password is changed only if data wasn't changed yet  (hash and salt)
+        const user = await prisma.user.findUnique({
+            where: {
+                email: email
+            }
+        });
+
+        if (!user) {
+            return false;
+        }
+        const currentHash = await new Promise((resolve, reject) => {
+            crypto.scrypt(currentPassword, user.salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey);
+            });
+        });
+        const storedHash = Buffer.from(user.hash, 'hex');
+
+        if (storedHash.length != currentHash.length || !crypto.timingSafeEqual(storedHash, currentHash)) {
+            return false;
+        }            
+
+        const salt = crypto.randomBytes(16).toString('hex');
+
+        const hash = await new Promise((resolve, reject) => {
+            crypto.scrypt(newPassword, salt, 64, (err, derivedKey) => {
+                if (err) {
+                    return reject(err);
+                }
+                resolve(derivedKey.toString('hex'));
+            });
+        });
+
+        return prisma.$transaction(async (transaction) => {
+            //if a recovery (or another change) replaced it in the meantime, this request fails
+            const updated = await transaction.user.updateMany({
                 where: {
-                    email: email
+                    user_id: user.user_id,
+                    hash: user.hash,
+                    salt: user.salt
                 },
                 data: {
                     hash,
-                    salt
+                    salt,
+                    first_login: false
+                }
+            });
+
+            if (updated.count != 1) {
+                return false;
+            }
+
+            //password change makes any outstanding recovery code useless
+            await transaction.otp_user.deleteMany({
+                where: {
+                    user_id: user.user_id
                 }
             });
 
             return true;
-        } catch (error) {
-            throw error;
-        }
+        });
     }
 
     this.saveRecoveryCode = async (email, recoveryCode) => {
@@ -224,7 +303,8 @@ export default function userDAO() {
                 },
                 data: {
                     hash: newHash,
-                    salt: newSalt
+                    salt: newSalt,
+                    first_login: false
                 }
             });
 

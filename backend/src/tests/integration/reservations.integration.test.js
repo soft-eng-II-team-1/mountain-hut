@@ -106,6 +106,8 @@ beforeAll(async () => {
     await createSlot('justInTime', 2 * HOUR + 5 * 60 * 1000, ['E']); // starts in 2h05m
     await createSlot('noTables', 6 * 24 * HOUR, []);
     await createSlot('race', 7 * 24 * HOUR, ['D']);               // 2 seats, for the concurrency test
+    await createSlot('activeList', 2 * 24 * HOUR, []);
+    await createSlot('pastList', -24 * HOUR, []);
 });
 
 afterAll(async () => {
@@ -119,9 +121,70 @@ afterAll(async () => {
     await prisma.$disconnect();
 });
 
-describe('GET /api/slots/:slotId/availability', () => {
+describe('GET /api/reservations/user/active', () => {
     it('responds 401 if not logged in', async () => {
-        await request(app).get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(401);
+        await request(app).get('/api/reservations/user/active').expect(401);
+    });
+
+    it('responds 403 if logged in as employee', async () => {
+        const agent = await loginAs('employee');
+        await agent.get('/api/reservations/user/active').expect(403);
+    });
+
+    it('returns only future reservations belonging to the logged hiker', async () => {
+        const ownFuture = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 2,
+                slot_id: slotIds.activeList,
+                user_id: users.hiker5.user_id,
+            },
+        });
+        const ownPast = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 2,
+                slot_id: slotIds.pastList,
+                user_id: users.hiker5.user_id,
+            },
+        });
+        const otherFuture = await prisma.reservation.create({
+            data: {
+                reservation_id: crypto.randomUUID(),
+                people: 1,
+                slot_id: slotIds.activeList,
+                user_id: users.hiker1.user_id,
+            },
+        });
+
+        const agent = await loginAs('hiker5');
+        const res = await agent.get('/api/reservations/user/active').expect(200);
+
+        const returnedIds = res.body.map((reservation) => reservation.reservation_id);
+        expect(returnedIds).toContain(ownFuture.reservation_id);
+        expect(returnedIds).not.toContain(ownPast.reservation_id);
+        expect(returnedIds).not.toContain(otherFuture.reservation_id);
+
+        await prisma.reservation.deleteMany({
+            where: {
+                reservation_id: {
+                    in: [
+                        ownFuture.reservation_id,
+                        ownPast.reservation_id,
+                        otherFuture.reservation_id,
+                    ],
+                },
+            },
+        });
+    });
+});
+
+describe('GET /api/slots/:slotId/availability', () => {
+    it('returns availability without logging in', async () => {
+        const res = await request(app).get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(200);
+
+        expect(res.body.available).toBe(true);
+        expect(res.body.totalAvailableSeats).toBe(12);
     });
 
     it('returns the free seats of the slot', async () => {
@@ -158,6 +221,17 @@ describe('GET /api/slots/:slotId/availability', () => {
     it('responds 404 if the slot has no tables', async () => {
         const agent = await loginAs('hiker5');
         await agent.get(`/api/slots/${slotIds.noTables}/availability?partySize=2`).expect(404);
+    });
+
+    it('responds 404 if the slot does not exist', async () => {
+        const agent = await loginAs('hiker5');
+        await agent.get(`/api/slots/${crypto.randomUUID()}/availability?partySize=2`).expect(404);
+    });
+
+    it('responds 500 on database error', async () => {
+        const agent = await loginAs('hiker5');
+        jest.spyOn(prisma.slot, 'findUnique').mockRejectedValueOnce(new Error('DB error'));
+        await agent.get(`/api/slots/${slotIds.main}/availability?partySize=2`).expect(500);
     });
 });
 
