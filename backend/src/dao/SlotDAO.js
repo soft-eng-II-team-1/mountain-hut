@@ -25,6 +25,7 @@ const toSlotResponse = (slot) => {
         slot_id: slot.slot_id,
         date_time_start: slot.date_time_start,
         date_time_end: slot.date_time_end,
+        menu: slot.menu,
         tables,
         total_seats: tables.reduce((sum, t) => sum + t.seats, 0),
     };
@@ -204,6 +205,7 @@ export default function SlotDAO() {
                 slot_id: slot.slot_id,
                 date_time_start: slot.date_time_start,
                 date_time_end: slot.date_time_end,  
+                menu: slot.menu,
                 free_seats: freeSeats,
             });
         }
