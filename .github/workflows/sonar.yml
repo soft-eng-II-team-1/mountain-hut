@@ -16,8 +16,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: MountainHutUser
-          POSTGRES_PASSWORD: Group01SE2
           POSTGRES_DB: MountainHut
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -27,7 +27,7 @@ jobs:
           --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://MountainHutUser:Group01SE2@localhost:5432/MountainHut?schema=public
+      DATABASE_URL: postgresql://MountainHutUser@localhost:5432/MountainHut?schema=public
       SESSION_SECRET: ci-test-secret
 
     steps:
@@ -45,15 +45,15 @@ jobs:
 
       - name: Install dependencies
         working-directory: backend
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Generate Prisma Client
         working-directory: backend
-        run: npx prisma generate --config prisma7.config.ts
+        run: ./node_modules/.bin/prisma generate --config prisma7.config.ts
 
       - name: Apply migrations
         working-directory: backend
-        run: npx prisma migrate deploy --config prisma7.config.ts
+        run: ./node_modules/.bin/prisma migrate deploy --config prisma7.config.ts
 
       - name: Run tests with coverage
         working-directory: backend
