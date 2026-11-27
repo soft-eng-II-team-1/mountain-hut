@@ -49,7 +49,7 @@ model slot {
   slot_id         String        @id @db.Uuid
   date_time_start DateTime      @db.Timestamptz(6)
   date_time_end   DateTime      @db.Timestamptz(6)
-  menu            String?       @db.Text
+  menu            String?
   reservation     reservation[]
   slot_table      slot_table[]
 }
@@ -87,7 +87,8 @@ model user {
   salt                String
   first_login         Boolean       @default(false)
   reservation         reservation[]
-  otp_user            otp_user? 
+  otp_user            otp_user?
+  hike                hike[]
 }
 
 enum user_role {
@@ -104,4 +105,23 @@ model otp_user {
   created_at  DateTime  @db.Timestamptz(6)
   expires_at  DateTime  @db.Timestamptz(6)
   user        user      @relation(fields: [user_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model hike {
+  hike_id         String    @id @db.Uuid
+  destination     String
+  route           String
+  waypoints       String[]  @default([])
+  date_time_start DateTime  @db.Timestamptz(6)
+  date_time_end   DateTime  @db.Timestamptz(6)
+  completed       Boolean   @default(false)
+  hiker_id        String    @db.Uuid
+  hiker           user      @relation(fields: [hiker_id], references: [user_id], onDelete: NoAction, onUpdate: NoAction)
+}
+
+model popular_hike {
+  popular_hike_id String    @id @db.Uuid
+  destination     String
+  route           String
+  waypoints       String[]  @default([])
 }

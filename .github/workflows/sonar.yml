@@ -1,0 +1,66 @@
+name: SonarQube Cloud Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarqube:
+    name: SonarQube Analysis
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: MountainHutUser
+          POSTGRES_DB: MountainHut
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U MountainHutUser -d MountainHut"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://MountainHutUser@localhost:5432/MountainHut?schema=public
+      SESSION_SECRET: ci-test-secret
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma Client
+        working-directory: backend
+        run: ./node_modules/.bin/prisma generate --config prisma7.config.ts
+
+      - name: Apply migrations
+        working-directory: backend
+        run: ./node_modules/.bin/prisma migrate deploy --config prisma7.config.ts
+
+      - name: Run tests with coverage
+        working-directory: backend
+        run: npm run test:coverage
+
+      - name: SonarQube Scan
+        if: always()
+        uses: SonarSource/sonarqube-scan-action@0303d6b62e310685c0e34d0b9cde218036885c4d
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
