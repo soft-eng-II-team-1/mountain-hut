@@ -91,8 +91,8 @@ router.get('/available', availableSlotsRules, validateRequest, async (req, res, 
 });
 
 // GET /api/slots/:slotId
-//staff only
-router.get('/:slotId', isStaff, slotIdParam, validateRequest, async (req, res, next) => {
+// Public meal details, including the menu, tables and total seats
+router.get('/:slotId', slotIdParam, validateRequest, async (req, res, next) => {
     try {
         const slot = await slotDao.getSlotById(req.params.slotId);
         return res.status(200).json(slot);

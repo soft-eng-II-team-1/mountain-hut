@@ -513,8 +513,8 @@
     },
     "/api/slots/available": {
       "get": {
-        "summary": "List the slots a hiker can book for a party in a time range (any logged-in user)",
-        "description": "Returns the slots that start in [from, to), start at least 2 hours from now and have at least partySize free seats, ordered by start time. ",
+        "summary": "List the slots a hiker can book for a party in a time range (public)",
+        "description": "Public endpoint; no login is required. Returns the slots that start in [from, to), start at least 2 hours from now and have at least partySize free seats, ordered by start time, including the menu when assigned.",
         "parameters": [
           {
             "name": "partySize",
@@ -564,9 +564,6 @@
               }
             }
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "422": {
             "$ref": "#/components/responses/ValidationError"
           }
@@ -586,7 +583,8 @@
         }
       ],
       "get": {
-        "summary": "Get a slot with its tables (employee or warden)",
+        "summary": "Get a slot with its meal times, menu and tables (public)",
+        "description": "No login is required. Returns any existing slot, including past or fully booked slots and slots inside the booking cutoff. The menu is plain text, or null when no menu is assigned.",
         "responses": {
           "200": {
             "description": "Slot",
@@ -598,11 +596,8 @@
               }
             }
           },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "A logged-in user must complete the required first-login password change"
           },
           "404": {
             "description": "Slot not found",
@@ -1397,6 +1392,12 @@
             "format": "date-time",
             "example": "2030-07-01T13:00:00.000Z"
           },
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Plain-text menu associated with this slot; null when no menu is assigned",
+            "example": "Vegetable soup\nPolenta with mushrooms\nApple cake"
+          },
           "tables": {
             "type": "array",
             "description": "Sorted by table number",
@@ -1426,6 +1427,12 @@
             "type": "string",
             "format": "date-time",
             "example": "2030-07-01T13:00:00.000Z"
+          },
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Plain-text menu associated with this slot; null when no menu is assigned",
+            "example": "Vegetable soup\nPolenta with mushrooms\nApple cake"
           },
           "free_seats": {
             "type": "integer",

@@ -1,0 +1,2 @@
+-- No-op: slot.menu is created by 20261126101552_menu_and_hikes.
+-- Retain this migration file without adding the same column twice.
