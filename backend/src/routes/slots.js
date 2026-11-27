@@ -4,6 +4,7 @@ import { body, param, query } from 'express-validator';
 import SlotDAO, { SlotError } from '../dao/SlotDAO.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isStaff } from '../middlewares/auth.js';
+import { normalizeMenu, parseMenu, validateMenu } from '../services/menuFormatter.js';
 
 const router = express.Router();
 const slotDao = new SlotDAO();
@@ -15,6 +16,7 @@ const statusByCode = {
     SLOT_OVERLAP: 409,
     HAS_RESERVATIONS: 409,
     CONCURRENT_UPDATE: 409,
+    SLOT_STARTED: 409,
 };
 
 const handleError = (err, res, next) => {
@@ -53,6 +55,24 @@ const availableSlotsRules = [
     query('to').exists({ values: 'falsy' }).withMessage('to is required').bail().isISO8601().withMessage('to must be an ISO 8601 date').bail().custom((value, { req }) => new Date(value) > new Date(req.query.from)).withMessage('to must be after from'),
 ];
 
+// Body of PUT /:slotId/menu and POST /menus/preview: { menu } (see services/menuFormatter.js for the format)
+const menuBodyRules = [
+    body('menu').isString().withMessage('menu must be a string')
+        .bail()
+        .custom((value) => {
+            const errors = validateMenu(value);
+            if (errors.length > 0) {
+                throw new Error(errors.join('; '));
+            }
+            return true;
+        }),
+];
+
+const previousMenusRules = [
+    query('q').optional().isString().withMessage('q must be a string'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be an integer between 1 and 100'),
+];
+
 const slotFromBody = (body) => ({
     start: new Date(body.date_time_start),
     end: new Date(body.date_time_end),
@@ -87,6 +107,57 @@ router.get('/available', availableSlotsRules, validateRequest, async (req, res, 
         return res.status(200).json(slots);
     } catch (err) {
         return next(err);
+    }
+});
+
+/*** MH-10: menus ***/
+// These routes come before /:slotId, otherwise "menus" would be read as a slotId
+
+// GET /api/slots/menus?q=...&limit=...
+// Menus already defined in some slot, to reuse (and change) them for another slot
+//staff only
+router.get('/menus', isStaff, previousMenusRules, validateRequest, async (req, res, next) => {
+    try {
+        // Express 5 does not keep the sanitized query values, so they are converted here
+        const menus = await slotDao.getPreviousMenus({
+            search: req.query.q?.trim() || undefined,
+            limit: req.query.limit ? Number(req.query.limit) : undefined,
+        });
+        return res.status(200).json(menus);
+    } catch (err) {
+        return next(err);
+    }
+});
+
+// POST /api/slots/menus/preview
+// Body: { menu } - checks and formats a menu without saving it (e.g. live preview while writing it)
+//staff only
+router.post('/menus/preview', isStaff, menuBodyRules, validateRequest, (req, res) => {
+    const menu = normalizeMenu(req.body.menu);
+    return res.status(200).json({ menu, menu_blocks: parseMenu(menu) });
+});
+
+// PUT /api/slots/:slotId/menu
+// Body: { menu } - sets or replaces the menu of a slot that has not started yet
+//staff only
+router.put('/:slotId/menu', isStaff, slotIdParam, menuBodyRules, validateRequest, async (req, res, next) => {
+    try {
+        const slot = await slotDao.setMenu(req.params.slotId, req.body.menu);
+        return res.status(200).json(slot);
+    } catch (err) {
+        return handleError(err, res, next);
+    }
+});
+
+// DELETE /api/slots/:slotId/menu
+// Removes the menu of a slot that has not started yet
+//staff only
+router.delete('/:slotId/menu', isStaff, slotIdParam, validateRequest, async (req, res, next) => {
+    try {
+        await slotDao.deleteMenu(req.params.slotId);
+        return res.status(204).end();
+    } catch (err) {
+        return handleError(err, res, next);
     }
 });
 

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import { prisma } from '../../prisma.client.ts';
 import { runSerializable } from './transaction.js';
+import { normalizeMenu, parseMenu } from '../services/menuFormatter.js';
 
 // Error with a code that the routes translate into an HTTP status
 export class SlotError extends Error {
@@ -12,6 +13,12 @@ export class SlotError extends Error {
 }
 
 const includeTables = { slot_table: { include: { table: true } } };
+
+// Menu of a slot as returned to the client: the raw text and its parsed blocks (see services/menuFormatter.js)
+const toMenuResponse = (menu) => ({
+    menu: menu ?? null,
+    menu_blocks: parseMenu(menu),
+});
 
 const concurrentUpdate = () => new SlotError('CONCURRENT_UPDATE', 'The slots are being modified by someone else, please try again');
 
@@ -27,6 +34,7 @@ const toSlotResponse = (slot) => {
         date_time_end: slot.date_time_end,
         tables,
         total_seats: tables.reduce((sum, t) => sum + t.seats, 0),
+        ...toMenuResponse(slot.menu),
     };
 };
 
@@ -47,6 +55,19 @@ const checkNoOverlap = async (tx, start, end, excludeSlotId) => {
 };
 
 // Throws if some of the table ids do not exist
+// Returns the slot whose menu is going to change. The menu of a slot can be changed or deleted
+// only before the slot starts: the menus of slots already started or in the past stay fixed
+const getSlotWithEditableMenu = async (tx, slotId) => {
+    const slot = await tx.slot.findUnique({ where: { slot_id: slotId } });
+    if (!slot) {
+        throw new SlotError('SLOT_NOT_FOUND', 'Slot not found');
+    }
+    if (slot.date_time_start <= new Date()) {
+        throw new SlotError('SLOT_STARTED', 'The menu of a slot that has already started cannot be changed');
+    }
+    return slot;
+};
+
 const checkTablesExist = async (tx, tableIds) => {
     const count = await tx.table.count({ where: { table_id: { in: tableIds } } });
     if (count !== tableIds.length) {
@@ -205,10 +226,63 @@ export default function SlotDAO() {
                 date_time_start: slot.date_time_start,
                 date_time_end: slot.date_time_end,  
                 free_seats: freeSeats,
+                ...toMenuResponse(slot.menu),
             });
         }
 
         return result;
     
+    };
+
+    /*** MH-10: menus ***/
+
+    // Sets (or replaces) the menu of a slot. The text is stored in the slot itself, so the same
+    // menu used by other slots is a separate copy: changing it here changes only this slot
+    this.setMenu = async (slotId, menu) => {
+        const normalized = normalizeMenu(menu);
+
+        return runSerializable(async (tx) => {
+            await getSlotWithEditableMenu(tx, slotId);
+            const updated = await tx.slot.update({
+                where: { slot_id: slotId },
+                data: { menu: normalized },
+                include: includeTables,
+            });
+            return toSlotResponse(updated);
+        }, concurrentUpdate);
+    };
+
+    // Removes the menu of a future slot (nothing happens if it has no menu)
+    this.deleteMenu = async (slotId) => {
+        return runSerializable(async (tx) => {
+            const slot = await getSlotWithEditableMenu(tx, slotId);
+            if (slot.menu !== null) {
+                await tx.slot.update({ where: { slot_id: slotId }, data: { menu: null } });
+            }
+        }, concurrentUpdate);
+    };
+
+    // Distinct menus already used in some slot (past or future), to be reused for other slots.
+    // Ordered by the most recent slot using them; `search` filters them by text (case insensitive)
+    this.getPreviousMenus = async ({ search, limit = 20 } = {}) => {
+        const where = { menu: { not: null } };
+        if (search) {
+            where.menu = { not: null, contains: search, mode: 'insensitive' };
+        }
+
+        const groups = await prisma.slot.groupBy({
+            by: ['menu'],
+            where,
+            _count: { _all: true },
+            _max: { date_time_start: true },
+            orderBy: { _max: { date_time_start: 'desc' } },
+            take: limit,
+        });
+
+        return groups.map((g) => ({
+            ...toMenuResponse(g.menu),
+            last_used_at: g._max.date_time_start,
+            used_in_slots: g._count._all,
+        }));
     };
 }

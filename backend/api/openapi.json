@@ -573,6 +573,97 @@
         }
       }
     },
+    "/api/slots/menus": {
+      "get": {
+        "summary": "List the menus already defined in some slot, to reuse them (employee or warden)",
+        "description": "Distinct menus of past and future slots, ordered by the most recent slot using them. A reused menu is copied into the new slot: changing it later changes only that slot.",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "Only menus containing this text (case insensitive)",
+            "schema": {
+              "type": "string",
+              "example": "polenta"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Max number of menus returned (default 20)",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "example": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Previous menus (empty array if none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PreviousMenu"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/slots/menus/preview": {
+      "post": {
+        "summary": "Check and format a menu without saving it (employee or warden)",
+        "description": "Useful for a live preview while the menu is written. Returns the normalized text and its parsed blocks.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MenuInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Formatted menu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormattedMenu"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
     "/api/slots/{slot_id}": {
       "parameters": [
         {
@@ -697,6 +788,111 @@
           },
           "409": {
             "description": "The slot has reservations, or it is being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      }
+    },
+    "/api/slots/{slot_id}/menu": {
+      "parameters": [
+        {
+          "name": "slot_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "put": {
+        "summary": "Set or replace the menu of a slot that has not started yet (employee or warden)",
+        "description": "The menu is stored in the slot: if the same text is used by other slots, they are not changed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MenuInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Slot with its new menu",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Slot"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slot has already started (its menu is fixed), or it is being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "$ref": "#/components/responses/ValidationError"
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove the menu of a slot that has not started yet (employee or warden)",
+        "responses": {
+          "204": {
+            "description": "Menu removed (also if the slot had no menu)"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "Slot not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The slot has already started (its menu is fixed), or it is being modified concurrently",
             "content": {
               "application/json": {
                 "schema": {
@@ -1407,6 +1603,19 @@
           "total_seats": {
             "type": "integer",
             "example": 6
+          },
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Menu text (null if the slot has no menu)",
+            "example": "**Dinner**\n- Starters\n  - *Polenta* with cheese\n- Dessert: _strudel_"
+          },
+          "menu_blocks": {
+            "type": "array",
+            "description": "Parsed menu, to render it without parsing the text (empty if there is no menu)",
+            "items": {
+              "$ref": "#/components/schemas/MenuBlock"
+            }
           }
         }
       },
@@ -1431,6 +1640,157 @@
             "type": "integer",
             "description": "Seats still free in the slot (always >= partySize)",
             "example": 10
+          },
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Menu text (null if the slot has no menu)",
+            "example": "**Dinner**\n- Starters\n  - *Polenta* with cheese\n- Dessert: _strudel_"
+          },
+          "menu_blocks": {
+            "type": "array",
+            "description": "Parsed menu, to render it without parsing the text (empty if there is no menu)",
+            "items": {
+              "$ref": "#/components/schemas/MenuBlock"
+            }
+          }
+        }
+      },
+      "MenuInput": {
+        "type": "object",
+        "required": [
+          "menu"
+        ],
+        "properties": {
+          "menu": {
+            "type": "string",
+            "maxLength": 5000,
+            "description": "Free text with a subset of Markdown: **bold**, *italic* or _italic_, list items starting with '- ' (or '* ', '+ '), sub items indented by 2 spaces per level (at most 2 levels of sub items). A backslash escapes a marker (\\* \\_ \\- \\+ \\\\). Line breaks are kept, a blank line separates paragraphs and lists. Cannot be empty.",
+            "example": "**Dinner**\n- Starters\n  - *Polenta* with cheese\n- Dessert: _strudel_"
+          }
+        }
+      },
+      "FormattedMenu": {
+        "type": "object",
+        "properties": {
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Menu text (null if the slot has no menu)",
+            "example": "**Dinner**\n- Starters\n  - *Polenta* with cheese\n- Dessert: _strudel_"
+          },
+          "menu_blocks": {
+            "type": "array",
+            "description": "Parsed menu, to render it without parsing the text (empty if there is no menu)",
+            "items": {
+              "$ref": "#/components/schemas/MenuBlock"
+            }
+          }
+        }
+      },
+      "PreviousMenu": {
+        "type": "object",
+        "properties": {
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "description": "Menu text (null if the slot has no menu)",
+            "example": "**Dinner**\n- Starters\n  - *Polenta* with cheese\n- Dessert: _strudel_"
+          },
+          "menu_blocks": {
+            "type": "array",
+            "description": "Parsed menu, to render it without parsing the text (empty if there is no menu)",
+            "items": {
+              "$ref": "#/components/schemas/MenuBlock"
+            }
+          },
+          "last_used_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Start of the most recent slot using this menu",
+            "example": "2030-07-01T19:00:00.000Z"
+          },
+          "used_in_slots": {
+            "type": "integer",
+            "description": "Number of slots using this menu",
+            "example": 3
+          }
+        }
+      },
+      "MenuBlock": {
+        "type": "object",
+        "description": "A paragraph ({ type: 'paragraph', content }) or a list ({ type: 'list', items })",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "paragraph",
+              "list"
+            ]
+          },
+          "content": {
+            "type": "array",
+            "description": "Only for paragraphs",
+            "items": {
+              "$ref": "#/components/schemas/MenuInline"
+            }
+          },
+          "items": {
+            "type": "array",
+            "description": "Only for lists",
+            "items": {
+              "$ref": "#/components/schemas/MenuListItem"
+            }
+          }
+        }
+      },
+      "MenuListItem": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MenuInline"
+            }
+          },
+          "children": {
+            "type": "array",
+            "description": "Sub items (empty if none)",
+            "items": {
+              "$ref": "#/components/schemas/MenuListItem"
+            }
+          }
+        }
+      },
+      "MenuInline": {
+        "type": "object",
+        "description": "Text ({ type: 'text', text }), bold or italic text ({ type: 'bold' | 'italic', content }) or a line break ({ type: 'line_break' })",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "bold",
+              "italic",
+              "line_break"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "description": "Only for text"
+          },
+          "content": {
+            "type": "array",
+            "description": "Only for bold and italic",
+            "items": {
+              "$ref": "#/components/schemas/MenuInline"
+            }
           }
         }
       },
