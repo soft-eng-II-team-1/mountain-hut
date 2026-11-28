@@ -17,6 +17,7 @@ import { sendEmail } from './config/mailer.js';
 import wardenRoutes from './routes/warden.js';
 import slotRoutes from './routes/slots.js';
 import hikerRoutes from './routes/hikers.js';
+import hikeRoutes from './routes/hikes.js';
 
 import UserDao from './dao/UserDAO.js';
 const userDao = new UserDao();
@@ -107,6 +108,9 @@ app.use('/api/warden', wardenRoutes);
 app.use('/api/slots', slotRoutes);
 
 app.use('/api/hikers', hikerRoutes);
+
+// MH-21: GET /api/hikes/active
+app.use('/api/hikes', hikeRoutes);
 
 if (process.env.SERVE_FRONTEND === 'true') {
   const frontendDirectory = path.resolve(

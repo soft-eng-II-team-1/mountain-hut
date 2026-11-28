@@ -990,6 +990,33 @@
           }
         }
       }
+    },
+    "/api/hikes/active": {
+      "get": {
+        "summary": "List active hikes (employee only)",
+        "description": "MH-21. Returns all the hikes already started (date_time_start not in the future) and not completed yet (completed = false), i.e. the hikers currently on a hike, so that the employee can monitor their expected return times. Each hike has destination, route, intermediate passage points (waypoints), start and expected return time, and the hiker on it. Ordered by expected return time (date_time_end), earliest first.",
+        "responses": {
+          "200": {
+            "description": "Active hikes (empty array if none)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ActiveHike"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1556,6 +1583,79 @@
             }
           }
         ]
+      },
+      "HikeHiker": {
+        "type": "object",
+        "description": "Hiker on the hike, with the contacts the staff may need if they do not come back",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "example": "Giulia"
+          },
+          "surname": {
+            "type": "string",
+            "example": "Verdi"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "example": "hiker.giulia@example.com"
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "example": "+39 333 1234567"
+          },
+          "emergency_contact": {
+            "type": "string",
+            "nullable": true,
+            "example": "Marco Verdi +39 333 7654321"
+          }
+        }
+      },
+      "ActiveHike": {
+        "type": "object",
+        "description": "A hike already started and not completed yet: the hiker is currently on it",
+        "properties": {
+          "hike_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "destination": {
+            "type": "string",
+            "example": "Monviso"
+          },
+          "route": {
+            "type": "string",
+            "example": "via the Chiaretto lake"
+          },
+          "waypoints": {
+            "type": "array",
+            "description": "Intermediate passage points, possibly empty",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "Viso Mozzo"
+            ]
+          },
+          "date_time_start": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "date_time_end": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Expected return time"
+          },
+          "hiker": {
+            "$ref": "#/components/schemas/HikeHiker"
+          }
+        }
       }
     },
     "responses": {
