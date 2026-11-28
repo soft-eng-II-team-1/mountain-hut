@@ -11,10 +11,11 @@
  */
 
 import { sendEmail } from '../config/mailer.js';
+import { HUT_TIME_ZONE } from './hutTime.js';
 
 // The hut's time zone: slot times are shown in local hut time,
 // whatever time zone the server (or Docker container) runs in
-const HUT_TIME_ZONE = 'Europe/Rome';
+
 const HUT_NAME = 'Fond des Fours Mountain Hut';
 
 // How to change the booking afterwards (MH-06), same in every confirmation

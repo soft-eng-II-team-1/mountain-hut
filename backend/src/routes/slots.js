@@ -4,6 +4,7 @@ import { body, param, query } from 'express-validator';
 import SlotDAO, { SlotError } from '../dao/SlotDAO.js';
 import validateRequest from '../middlewares/validateParams.js';
 import { isStaff } from '../middlewares/auth.js';
+import { isMonday, weekBounds } from '../services/hutTime.js';
 
 const router = express.Router();
 const slotDao = new SlotDAO();
@@ -12,6 +13,7 @@ const slotDao = new SlotDAO();
 const statusByCode = {
     SLOT_NOT_FOUND: 404,
     TABLE_NOT_FOUND: 422,
+    SOURCE_WEEK_EMPTY: 422,
     SLOT_OVERLAP: 409,
     HAS_RESERVATIONS: 409,
     CONCURRENT_UPDATE: 409,
@@ -51,6 +53,26 @@ const availableSlotsRules = [
     query('partySize').exists({ values: 'falsy' }).withMessage('partySize is required').bail().isInt({ min: 1 }).withMessage('partySize must be a positive integer').toInt(),
     query('from').exists({ values: 'falsy' }).withMessage('from is required').bail().isISO8601().withMessage('from must be an ISO 8601 date'),
     query('to').exists({ values: 'falsy' }).withMessage('to is required').bail().isISO8601().withMessage('to must be an ISO 8601 date').bail().custom((value, { req }) => new Date(value) > new Date(req.query.from)).withMessage('to must be after from'),
+];
+
+// Body of POST /copy-week: { source_week_start, target_week_start, include_menu? }
+// Weeks are given as the date of their Monday, "YYYY-MM-DD"
+const weekStartRule = (field) => body(field)
+    .isDate({ format: 'YYYY-MM-DD', strictMode: true }).withMessage(`${field} must be a date in the format YYYY-MM-DD`)
+    .bail()
+    .custom(isMonday).withMessage(`${field} must be a Monday`);
+
+const copyWeekRules = [
+    weekStartRule('source_week_start'),
+    weekStartRule('target_week_start')
+        .bail()
+        .custom((value, { req }) => value !== req.body.source_week_start)
+        .withMessage('target_week_start must be different from source_week_start')
+        .bail()
+        .custom((value) => weekBounds(value).start > new Date())
+        .withMessage('target_week_start must be a week in the future'),
+    body('include_menu').optional().isBoolean({ strict: true }).withMessage('include_menu must be a boolean')
+        .toBoolean(true),
 ];
 
 const slotFromBody = (body) => ({
@@ -107,6 +129,22 @@ router.post('/', isStaff, slotBodyRules, validateRequest, async (req, res, next)
     try {
         const slot = await slotDao.createSlot(slotFromBody(req.body));
         return res.status(201).json(slot);
+    } catch (err) {
+        return handleError(err, res, next);
+    }
+});
+
+// POST /api/slots/copy-week
+// Replaces all the slots of the target week with a copy of the source week (MH-09).
+// The menu is copied only if include_menu is true
+router.post('/copy-week', isStaff, copyWeekRules, validateRequest, async (req, res, next) => {
+    try {
+        const result = await slotDao.copyWeek({
+            sourceWeekStart: req.body.source_week_start,
+            targetWeekStart: req.body.target_week_start,
+            includeMenu: req.body.include_menu === true,
+        });
+        return res.status(201).json(result);
     } catch (err) {
         return handleError(err, res, next);
     }

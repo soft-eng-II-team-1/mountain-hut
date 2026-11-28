@@ -511,6 +511,60 @@
         }
       }
     },
+    "/api/slots/copy-week": {
+      "post": {
+        "summary": "Copy the schedule of a week into another week (employee or warden)",
+        "description": "Replaces all the slots of the target week with a copy of the slots of the source week, with the same tables and the same local hut times (Europe/Rome, also across a daylight saving time change). A week goes from Monday 00:00 to the next Monday 00:00 hut time, and a slot belongs to the week it starts in. The target week must be in the future and none of its slots can have reservations. The menu is copied only if include_menu is true. Everything happens in one transaction: if it fails, nothing changes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CopyWeekInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Target week replaced with the copy of the source week",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CopiedWeek"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "The target week has reservations, a copied slot overlaps an existing slot outside the target week, or the slots are being modified concurrently",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid parameters (dates not in the format YYYY-MM-DD or not a Monday, same source and target week, target week not in the future, include_menu not a boolean), or the source week has no slots",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/slots/available": {
       "get": {
         "summary": "List the slots a hiker can book for a party in a time range (any logged-in user)",
@@ -1397,6 +1451,11 @@
             "format": "date-time",
             "example": "2030-07-01T13:00:00.000Z"
           },
+          "menu": {
+            "type": "string",
+            "nullable": true,
+            "example": null
+          },
           "tables": {
             "type": "array",
             "description": "Sorted by table number",
@@ -1407,6 +1466,49 @@
           "total_seats": {
             "type": "integer",
             "example": 6
+          }
+        }
+      },
+      "CopyWeekInput": {
+        "type": "object",
+        "required": [
+          "source_week_start",
+          "target_week_start"
+        ],
+        "properties": {
+          "source_week_start": {
+            "type": "string",
+            "format": "date",
+            "description": "Monday of the week to copy",
+            "example": "2030-07-01"
+          },
+          "target_week_start": {
+            "type": "string",
+            "format": "date",
+            "description": "Monday of the week to replace. Must be different from source_week_start and in the future",
+            "example": "2030-07-08"
+          },
+          "include_menu": {
+            "type": "boolean",
+            "default": false,
+            "description": "Also copy the menu of each slot"
+          }
+        }
+      },
+      "CopiedWeek": {
+        "type": "object",
+        "properties": {
+          "week_start": {
+            "type": "string",
+            "format": "date",
+            "example": "2030-07-08"
+          },
+          "slots": {
+            "type": "array",
+            "description": "The new slots of the target week, ordered by start time",
+            "items": {
+              "$ref": "#/components/schemas/Slot"
+            }
           }
         }
       },

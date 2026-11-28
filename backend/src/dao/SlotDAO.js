@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 
 import { prisma } from '../../prisma.client.ts';
 import { runSerializable } from './transaction.js';
+import { daysBetween, shiftByDays, weekBounds } from '../services/hutTime.js';
 
 // Error with a code that the routes translate into an HTTP status
 export class SlotError extends Error {
@@ -25,6 +26,7 @@ const toSlotResponse = (slot) => {
         slot_id: slot.slot_id,
         date_time_start: slot.date_time_start,
         date_time_end: slot.date_time_end,
+        menu: slot.menu,
         tables,
         total_seats: tables.reduce((sum, t) => sum + t.seats, 0),
     };
@@ -167,6 +169,71 @@ export default function SlotDAO() {
 
             await tx.slot_table.deleteMany({ where: { slot_id: slotId } });
             await tx.slot.delete({ where: { slot_id: slotId } });
+        }, concurrentUpdate);
+    };
+
+
+    // MH-09: copies all the slots of a week (with their tables, and the menu only if asked)
+    // into another week, keeping the same local hut times.
+    // The target week is replaced completely, so none of its slots can have reservations.
+    // Weeks are given as the date of their Monday, "YYYY-MM-DD"
+    this.copyWeek = async ({ sourceWeekStart, targetWeekStart, includeMenu = false }) => {
+        const source = weekBounds(sourceWeekStart);
+        const target = weekBounds(targetWeekStart);
+        const days = daysBetween(sourceWeekStart, targetWeekStart);
+
+        return runSerializable(async (tx) => {
+            const sourceSlots = await tx.slot.findMany({
+                where: { date_time_start: { gte: source.start, lt: source.end } },
+                include: { slot_table: true },
+                orderBy: { date_time_start: 'asc' },
+            });
+            if (sourceSlots.length === 0) {
+                throw new SlotError('SOURCE_WEEK_EMPTY', 'The week to copy has no slots');
+            }
+
+            const targetSlots = await tx.slot.findMany({
+                where: { date_time_start: { gte: target.start, lt: target.end } },
+                select: { slot_id: true },
+            });
+            const targetIds = targetSlots.map((s) => s.slot_id);
+
+            const reservation = await tx.reservation.findFirst({ where: { slot_id: { in: targetIds } } });
+            if (reservation) {
+                throw new SlotError('HAS_RESERVATIONS', 'Cannot replace the schedule of a week that has reservations');
+            }
+
+            // the existing schedule of the target week is replaced completely
+            await tx.slot_table.deleteMany({ where: { slot_id: { in: targetIds } } });
+            await tx.slot.deleteMany({ where: { slot_id: { in: targetIds } } });
+
+            const createdIds = [];
+            for (const slot of sourceSlots) {
+                const start = shiftByDays(slot.date_time_start, days);
+                const end = shiftByDays(slot.date_time_end, days);
+
+                // the copies cannot overlap each other, but they could overlap a slot across the week boundary
+                await checkNoOverlap(tx, start, end);
+
+                const slotId = crypto.randomUUID();
+                await tx.slot.create({
+                    data: {
+                        slot_id: slotId,
+                        date_time_start: start,
+                        date_time_end: end,
+                        menu: includeMenu ? slot.menu : null,
+                    },
+                });
+                await linkTables(tx, slotId, slot.slot_table.map((st) => st.table_id));
+                createdIds.push(slotId);
+            }
+
+            const created = await tx.slot.findMany({
+                where: { slot_id: { in: createdIds } },
+                include: includeTables,
+                orderBy: { date_time_start: 'asc' },
+            });
+            return { week_start: targetWeekStart, slots: created.map(toSlotResponse) };
         }, concurrentUpdate);
     };
 
